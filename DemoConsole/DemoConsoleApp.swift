@@ -13,24 +13,24 @@ import SwiftUI
 @main
 struct DemoConsoleApp: App {
     @StateObject private var appState = AppState()
+    @ObservedObject private var preferences = UserPreferences.shared
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(appState)
                 .frame(minWidth: 800, minHeight: 600)
+                .preferredColorScheme(preferences.themeMode.colorScheme)
         }
         .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {}
+        }
 
-            // App 设置菜单
-            CommandGroup(after: .appSettings) {
-                Button("偏好设置...") {
-                    appState.showSettings = true
-                }
-                .keyboardShortcut(",", modifiers: .command)
-            }
+        // 偏好设置独立窗口
+        Settings {
+            SettingsView()
+                .preferredColorScheme(preferences.themeMode.colorScheme)
         }
     }
 }
@@ -62,9 +62,6 @@ final class AppState: ObservableObject {
 
     /// 是否正在初始化
     @Published var isInitializing = true
-
-    /// 是否显示设置窗口
-    @Published var showSettings = false
 
     // MARK: - 设备连接状态
 

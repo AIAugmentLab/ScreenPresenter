@@ -13,33 +13,24 @@ import SwiftUI
 
 // MARK: - 布局样式
 
-/// 多设备布局样式
-enum LayoutStyle: String, CaseIterable, Identifiable, Codable {
-    case single = "single" // 单设备
-    case sideBySide = "sideBySide" // 并排
-    case grid = "grid" // 网格
-    case pip = "pip" // 画中画
-    case stack = "stack" // 堆叠
+/// 分屏布局模式
+enum SplitLayout: String, CaseIterable, Identifiable, Codable {
+    case sideBySide // 左右平分
+    case topBottom // 上下平分
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .single: return "单设备"
-        case .sideBySide: return "并排"
-        case .grid: return "网格"
-        case .pip: return "画中画"
-        case .stack: return "堆叠"
+        case .sideBySide: "左右平分"
+        case .topBottom: "上下平分"
         }
     }
 
     var icon: String {
         switch self {
-        case .single: return "rectangle"
-        case .sideBySide: return "rectangle.split.2x1"
-        case .grid: return "rectangle.split.2x2"
-        case .pip: return "pip"
-        case .stack: return "rectangle.stack"
+        case .sideBySide: "rectangle.split.2x1"
+        case .topBottom: "rectangle.split.1x2"
         }
     }
 }
@@ -48,25 +39,42 @@ enum LayoutStyle: String, CaseIterable, Identifiable, Codable {
 
 /// 主题模式
 enum ThemeMode: String, CaseIterable, Identifiable, Codable {
-    case system = "system"
-    case light = "light"
-    case dark = "dark"
+    case system
+    case light
+    case dark
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .system: return "跟随系统"
-        case .light: return "浅色"
-        case .dark: return "深色"
+        case .system: "跟随系统"
+        case .light: "浅色"
+        case .dark: "深色"
         }
     }
 
     var colorScheme: ColorScheme? {
         switch self {
-        case .system: return nil
-        case .light: return .light
-        case .dark: return .dark
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
+    }
+}
+
+// MARK: - 背景色模式
+
+/// 预览区域背景色模式
+enum BackgroundColorMode: String, CaseIterable, Identifiable, Codable {
+    case followTheme // 跟随主题
+    case custom // 自定义颜色
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .followTheme: "跟随主题"
+        case .custom: "自定义"
         }
     }
 }
@@ -75,7 +83,6 @@ enum ThemeMode: String, CaseIterable, Identifiable, Codable {
 
 /// 用户偏好设置
 final class UserPreferences: ObservableObject {
-
     // MARK: - Singleton
 
     static let shared = UserPreferences()
@@ -88,6 +95,8 @@ final class UserPreferences: ObservableObject {
         static let reconnectDelay = "reconnectDelay"
         static let maxReconnectAttempts = "maxReconnectAttempts"
         static let themeMode = "themeMode"
+        static let backgroundColorMode = "backgroundColorMode"
+        static let customBackgroundColor = "customBackgroundColor"
         static let captureFrameRate = "captureFrameRate"
         static let scrcpyBitrate = "scrcpyBitrate"
         static let scrcpyMaxSize = "scrcpyMaxSize"
@@ -98,7 +107,7 @@ final class UserPreferences: ObservableObject {
 
     /// 默认布局样式
     @AppStorage(Keys.defaultLayout)
-    var defaultLayout: LayoutStyle = .single
+    var defaultLayout: SplitLayout = .sideBySide
 
     // MARK: - Connection Settings
 
@@ -119,6 +128,33 @@ final class UserPreferences: ObservableObject {
     /// 主题模式
     @AppStorage(Keys.themeMode)
     var themeMode: ThemeMode = .system
+
+    /// 背景色模式
+    @AppStorage(Keys.backgroundColorMode)
+    var backgroundColorMode: BackgroundColorMode = .followTheme
+
+    /// 自定义背景色（十六进制字符串）
+    @AppStorage(Keys.customBackgroundColor)
+    var customBackgroundColorHex: String = "1C1C1E"
+
+    /// 自定义背景色
+    var customBackgroundColor: Color {
+        get { Color(hex: customBackgroundColorHex) }
+        set { customBackgroundColorHex = newValue.toHex() }
+    }
+
+    /// 获取当前有效的背景色
+    func effectiveBackgroundColor(for colorScheme: ColorScheme) -> Color {
+        switch backgroundColorMode {
+        case .followTheme:
+            // 跟随主题：亮色用窗口背景色，暗色用深色背景
+            colorScheme == .dark
+                ? Color(NSColor.windowBackgroundColor)
+                : Color(NSColor.windowBackgroundColor)
+        case .custom:
+            customBackgroundColor
+        }
+    }
 
     // MARK: - Capture Settings
 
@@ -171,26 +207,73 @@ final class UserPreferences: ObservableObject {
 
 // MARK: - AppStorage Extensions for Custom Types
 
-extension LayoutStyle: RawRepresentable {
-    public init?(rawValue: String) {
+extension SplitLayout: RawRepresentable {
+    init?(rawValue: String) {
         switch rawValue {
-        case "single": self = .single
         case "sideBySide": self = .sideBySide
-        case "grid": self = .grid
-        case "pip": self = .pip
-        case "stack": self = .stack
+        case "topBottom": self = .topBottom
         default: return nil
         }
     }
 }
 
 extension ThemeMode: RawRepresentable {
-    public init?(rawValue: String) {
+    init?(rawValue: String) {
         switch rawValue {
         case "system": self = .system
         case "light": self = .light
         case "dark": self = .dark
         default: return nil
         }
+    }
+}
+
+extension BackgroundColorMode: RawRepresentable {
+    init?(rawValue: String) {
+        switch rawValue {
+        case "followTheme": self = .followTheme
+        case "custom": self = .custom
+        default: return nil
+        }
+    }
+}
+
+// MARK: - Color Hex Extension
+
+extension Color {
+    /// 从十六进制字符串创建颜色
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 3: // RGB (12-bit)
+            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xf) * 17, (int & 0xf) * 17)
+        case 6: // RGB (24-bit)
+            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xff, int & 0xff)
+        case 8: // ARGB (32-bit)
+            (a, r, g, b) = (int >> 24, int >> 16 & 0xff, int >> 8 & 0xff, int & 0xff)
+        default:
+            (a, r, g, b) = (255, 0, 0, 0)
+        }
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue: Double(b) / 255,
+            opacity: Double(a) / 255
+        )
+    }
+
+    /// 将颜色转换为十六进制字符串
+    func toHex() -> String {
+        guard let components = NSColor(self).usingColorSpace(.sRGB)?.cgColor.components else {
+            return "000000"
+        }
+        let r = components.count > 0 ? components[0] : 0
+        let g = components.count > 1 ? components[1] : 0
+        let b = components.count > 2 ? components[2] : 0
+        return String(format: "%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255))
     }
 }
