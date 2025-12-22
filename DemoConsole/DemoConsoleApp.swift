@@ -16,13 +16,12 @@ struct DemoConsoleApp: App {
     @ObservedObject private var preferences = UserPreferences.shared
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup("DemoConsole") {
             ContentView()
                 .environmentObject(appState)
                 .frame(minWidth: 800, minHeight: 600)
                 .preferredColorScheme(preferences.themeMode.colorScheme)
         }
-        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {}
         }
@@ -48,8 +47,8 @@ final class AppState: ObservableObject {
     /// Android 连接器
     @Published private(set) var androidConnector: AndroidConnector!
 
-    /// iOS 设备提供者
-    @Published private(set) var iosDeviceProvider = IOSDeviceProvider()
+    /// QVH 设备管理器（iOS 设备，使用 quicktime_video_hack）
+    @Published private(set) var qvhDeviceManager = QVHDeviceManager.shared
 
     /// 权限检查器
     @Published var permissionChecker = PermissionChecker()
@@ -65,8 +64,8 @@ final class AppState: ObservableObject {
 
     // MARK: - 设备源（捕获）
 
-    /// iOS 设备源
-    @Published private(set) var iosDeviceSource: IOSDeviceSource?
+    /// iOS 设备源（使用 QVH）
+    @Published private(set) var iosDeviceSource: QVHDeviceSource?
 
     /// Android 设备源
     @Published private(set) var androidDeviceSource: ScrcpyDeviceSource?
@@ -100,9 +99,9 @@ final class AppState: ObservableObject {
         androidDeviceProvider.devices.first?.displayName
     }
 
-    /// iOS 是否已连接（设备列表不为空，且设备源处于有效状态）
+    /// iOS 是否已连接（QVH 设备列表不为空，且设备源处于有效状态）
     var iosConnected: Bool {
-        guard !iosDeviceProvider.devices.isEmpty else { return false }
+        guard !qvhDeviceManager.devices.isEmpty else { return false }
         // 如果设备源存在，检查其状态
         if let source = iosDeviceSource {
             switch source.state {
@@ -118,7 +117,7 @@ final class AppState: ObservableObject {
 
     /// iOS 设备名称
     var iosDeviceName: String? {
-        iosDeviceProvider.devices.first?.name
+        qvhDeviceManager.devices.first?.displayName
     }
 
     /// iOS 捕获中
@@ -169,7 +168,7 @@ final class AppState: ObservableObject {
 
         // 开始监控设备
         androidDeviceProvider.startMonitoring()
-        iosDeviceProvider.startMonitoring()
+        qvhDeviceManager.startMonitoring() // 使用 QVH 监控 iOS 设备
 
         // 启动设备观察
         startDeviceObservation()
@@ -185,8 +184,8 @@ final class AppState: ObservableObject {
     func refreshDevices() {
         Task {
             await androidDeviceProvider.refreshDevices()
+            await qvhDeviceManager.refreshDevices() // 使用 QVH 刷新 iOS 设备
         }
-        iosDeviceProvider.refreshDevices()
     }
 
     // MARK: - 设备观察
@@ -214,13 +213,13 @@ final class AppState: ObservableObject {
         await handleAndroidDeviceChange()
     }
 
-    /// 处理 iOS 设备变化
+    /// 处理 iOS 设备变化（使用 QVH）
     private func handleIOSDeviceChange() async {
-        let currentDevice = iosDeviceProvider.devices.first
+        let currentDevice = qvhDeviceManager.devices.first
 
         if let device = currentDevice {
             // 设备已连接
-            if iosDeviceSource == nil || iosDeviceSource?.iosDevice.id != device.id {
+            if iosDeviceSource == nil || iosDeviceSource?.qvhDevice.udid != device.udid {
                 // 创建新的设备源
                 await disconnectIOSDevice()
                 await connectIOSDevice(device)
@@ -252,32 +251,34 @@ final class AppState: ObservableObject {
         }
     }
 
-    // MARK: - iOS 设备管理
+    // MARK: - iOS 设备管理（使用 QVH）
 
-    /// 连接 iOS 设备（不自动启动捕获，由用户手动点击开始）
-    private func connectIOSDevice(_ device: IOSDevice) async {
-        AppLogger.device.info("开始连接 iOS 设备: \(device.name), ID: \(device.id)")
+    /// 准备 iOS 设备源（使用 QVH，不自动连接，由用户手动点击捕获时才启动）
+    private func connectIOSDevice(_ device: QVHDevice) async {
+        AppLogger.device.info("准备 iOS 设备 (QVH): \(device.displayName), UDID: \(device.udid)")
 
-        let source = IOSDeviceSource(device: device)
+        // 检查 qvh 是否可用
+        guard qvhDeviceManager.isQVHInstalled else {
+            AppLogger.device.warning("qvh 未安装，无法捕获 iOS 设备")
+            return
+        }
+
+        let source = QVHDeviceSource(device: device, qvhPath: qvhDeviceManager.qvhPath)
         iosDeviceSource = source
 
-        do {
-            try await source.connect()
-            AppLogger.device.info("iOS 设备已连接: \(device.name), 状态: \(source.state.displayText)")
+        // QVH 设备源的 connect() 会启动 qvh 进程，所以不在这里调用
+        // 等待用户点击"开始捕获"按钮时再调用 startIOSCapture()
+        AppLogger.device.info("iOS 设备已准备就绪 (QVH): \(device.displayName)")
 
-            // 订阅帧流（用户点击捕获后会收到帧）
-            subscribeToIOSFrames(source)
-        } catch {
-            AppLogger.device.error("iOS 设备连接失败: \(error.localizedDescription)")
-            // 保留 source 以便 UI 显示错误状态
-        }
+        // 订阅帧流（用户点击捕获后会收到帧）
+        subscribeToIOSFrames(source)
     }
 
     /// 断开 iOS 设备
     private func disconnectIOSDevice() async {
         guard let source = iosDeviceSource else { return }
 
-        AppLogger.device.info("断开 iOS 设备: \(source.displayName)")
+        AppLogger.device.info("断开 iOS 设备 (QVH): \(source.displayName)")
 
         await source.stopCapture()
         await source.disconnect()
@@ -287,7 +288,7 @@ final class AppState: ObservableObject {
     }
 
     /// 订阅 iOS 帧流
-    private func subscribeToIOSFrames(_ source: IOSDeviceSource) {
+    private func subscribeToIOSFrames(_ source: QVHDeviceSource) {
         Task { [weak self] in
             for await frame in source.frameStream {
                 await MainActor.run {
@@ -349,10 +350,15 @@ final class AppState: ObservableObject {
 
     // MARK: - 公开方法
 
-    /// 手动启动 iOS 捕获
+    /// 手动启动 iOS 捕获（QVH）
     func startIOSCapture() async {
         guard let source = iosDeviceSource else { return }
         do {
+            // QVH 设备源需要先连接（启动 qvh 进程）
+            if source.state == .idle || source.state == .disconnected {
+                try await source.connect()
+            }
+            // 然后开始捕获
             try await source.startCapture()
         } catch {
             AppLogger.capture.error("启动 iOS 捕获失败: \(error.localizedDescription)")

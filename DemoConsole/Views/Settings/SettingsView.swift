@@ -235,13 +235,8 @@ struct SettingsView: View {
                             permission: permission,
                             onRequest: {
                                 Task {
-                                    switch permission.id {
-                                    case "camera":
-                                        _ = await permissionChecker.requestCameraPermission()
-                                    case "screenRecording":
+                                    if permission.id == "screenRecording" {
                                         _ = await permissionChecker.requestScreenRecordingPermission()
-                                    default:
-                                        break
                                     }
                                 }
                             },
@@ -256,8 +251,8 @@ struct SettingsView: View {
                     }
                 }
 
-                // 工具链组
-                SettingsGroup(title: "工具链", icon: "wrench.and.screwdriver") {
+                // Android 工具链组
+                SettingsGroup(title: "Android 工具链", icon: "apps.iphone") {
                     // adb
                     ToolchainRow(
                         name: "adb",
@@ -275,6 +270,18 @@ struct SettingsView: View {
                         status: toolchainManager.scrcpyStatus,
                         version: toolchainManager.scrcpyVersionDescription,
                         installURL: URL(string: "https://github.com/Genymobile/scrcpy")
+                    )
+                }
+
+                // iOS 工具链组
+                SettingsGroup(title: "iOS 工具链", icon: "iphone") {
+                    // qvh (iOS 投屏工具)
+                    ToolchainRow(
+                        name: "qvh",
+                        description: "iOS 投屏工具 (quicktime_video_hack)",
+                        status: toolchainManager.qvhStatus,
+                        version: toolchainManager.qvhVersionDescription,
+                        installURL: URL(string: "https://github.com/danielpaulus/quicktime_video_hack")
                     )
                 }
 

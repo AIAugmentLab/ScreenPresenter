@@ -49,32 +49,35 @@ struct PermissionChecklistView: View {
                             },
                             onRequestPermission: {
                                 // 根据权限类型请求相应权限
-                                switch permission.id {
-                                case "camera":
-                                    Task {
-                                        _ = await appState.permissionChecker.requestCameraPermission()
-                                    }
-                                case "screenRecording":
+                                if permission.id == "screenRecording" {
                                     Task {
                                         _ = await appState.permissionChecker.requestScreenRecordingPermission()
                                     }
-                                default:
-                                    break
                                 }
                             }
                         )
                     }
 
-                    // 工具链检查
-                    SectionHeader(title: "工具链", icon: "wrench.and.screwdriver")
+                    // Android 工具链检查
+                    SectionHeader(title: "Android 工具链", icon: "apps.iphone")
 
-                    let toolchainItems = appState.permissionChecker.checkToolchain(manager: appState.toolchainManager)
-                    ForEach(toolchainItems) { item in
+                    let androidToolchainItems = appState.permissionChecker
+                        .checkAndroidToolchain(manager: appState.toolchainManager)
+                    ForEach(androidToolchainItems) { item in
                         ToolchainCheckRow(item: item) {
                             if item.name == "scrcpy" {
                                 showScrcpyInstall = true
                             }
                         }
+                    }
+
+                    // iOS 工具链检查
+                    SectionHeader(title: "iOS 工具链", icon: "iphone")
+
+                    let iosToolchainItems = appState.permissionChecker
+                        .checkIOSToolchain(manager: appState.toolchainManager)
+                    ForEach(iosToolchainItems) { item in
+                        ToolchainCheckRow(item: item) {}
                     }
                 }
                 .padding()
