@@ -52,8 +52,12 @@ final class AndroidDeviceProvider: ObservableObject {
 
     /// 开始监控设备
     func startMonitoring() {
-        guard !isMonitoring else { return }
+        guard !isMonitoring else {
+            AppLogger.device.debug("设备监控已在运行中")
+            return
+        }
 
+        AppLogger.device.info("开始监控 Android 设备")
         isMonitoring = true
         lastError = nil
 
@@ -64,11 +68,14 @@ final class AndroidDeviceProvider: ObservableObject {
                 await refreshDevices()
                 try? await Task.sleep(nanoseconds: UInt64(pollingInterval * 1_000_000_000))
             }
+
+            AppLogger.device.info("设备监控已停止")
         }
     }
 
     /// 停止监控
     func stopMonitoring() {
+        AppLogger.device.info("停止监控 Android 设备")
         isMonitoring = false
         monitoringTask?.cancel()
         monitoringTask = nil
@@ -76,6 +83,8 @@ final class AndroidDeviceProvider: ObservableObject {
 
     /// 手动刷新设备列表
     func refreshDevices() async {
+        AppLogger.device.debug("刷新 Android 设备列表...")
+
         do {
             let result = try await processRunner.run(
                 toolchainManager.adbPath,
@@ -87,15 +96,22 @@ final class AndroidDeviceProvider: ObservableObject {
 
                 // 只在设备列表真正变化时更新
                 if newDevices != devices {
+                    AppLogger.device.info("Android 设备列表已更新: \(newDevices.count) 个设备")
+                    for device in newDevices {
+                        AppLogger.device
+                            .info("  - \(device.serial): \(device.state.rawValue), 型号: \(device.model ?? "未知")")
+                    }
                     devices = newDevices
                 }
 
                 isAdbServerRunning = true
                 lastError = nil
             } else {
+                AppLogger.device.error("adb devices 命令失败: \(result.stderr)")
                 lastError = "adb 命令执行失败: \(result.stderr)"
             }
         } catch {
+            AppLogger.device.error("刷新设备列表失败: \(error.localizedDescription)")
             lastError = error.localizedDescription
             isAdbServerRunning = false
         }
@@ -103,20 +119,31 @@ final class AndroidDeviceProvider: ObservableObject {
 
     /// 启动 adb 服务
     func startAdbServer() async {
+        AppLogger.device.info("启动 adb 服务...")
+
         do {
             let result = try await processRunner.run(
                 toolchainManager.adbPath,
                 arguments: ["start-server"]
             )
             isAdbServerRunning = result.isSuccess
+
+            if result.isSuccess {
+                AppLogger.device.info("adb 服务已启动")
+            } else {
+                AppLogger.device.error("adb 服务启动失败: \(result.stderr)")
+            }
         } catch {
             isAdbServerRunning = false
             lastError = L10n.adb.startFailed(error.localizedDescription)
+            AppLogger.device.error("adb 服务启动异常: \(error.localizedDescription)")
         }
     }
 
     /// 停止 adb 服务
     func stopAdbServer() async {
+        AppLogger.device.info("停止 adb 服务...")
+
         do {
             _ = try await processRunner.run(
                 toolchainManager.adbPath,
@@ -124,8 +151,10 @@ final class AndroidDeviceProvider: ObservableObject {
             )
             isAdbServerRunning = false
             devices = []
+            AppLogger.device.info("adb 服务已停止")
         } catch {
             lastError = L10n.adb.stopFailed(error.localizedDescription)
+            AppLogger.device.error("停止 adb 服务失败: \(error.localizedDescription)")
         }
     }
 

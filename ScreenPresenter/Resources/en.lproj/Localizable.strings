@@ -180,6 +180,7 @@
 "error.permissionDenied" = "Permission denied";
 "error.windowNotFound" = "Screen mirroring window not found";
 "error.captureStartFailed" = "Capture start failed: %@";
+"error.captureInterrupted" = "Capture interrupted";
 "error.processTerminated" = "Process terminated (exit code: %d)";
 "error.timeout" = "Connection timeout";
 "error.noDevice" = "No available %@ device";

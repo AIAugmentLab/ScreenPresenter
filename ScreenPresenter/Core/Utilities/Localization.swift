@@ -397,6 +397,7 @@ enum L10n {
         static var permissionDenied: String { "error.permissionDenied".localized }
         static var windowNotFound: String { "error.windowNotFound".localized }
         static func captureStartFailed(_ reason: String) -> String { "error.captureStartFailed".localized(reason) }
+        static var captureInterrupted: String { "error.captureInterrupted".localized }
         static func processTerminated(_ code: Int32) -> String { "error.processTerminated".localized(code) }
         static var timeout: String { "error.timeout".localized }
         static func noDevice(_ platform: String) -> String { "error.noDevice".localized(platform) }

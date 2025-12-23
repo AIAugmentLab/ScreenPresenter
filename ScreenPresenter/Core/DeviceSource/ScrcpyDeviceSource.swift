@@ -13,6 +13,7 @@ import AppKit
 import Combine
 import CoreMedia
 import CoreVideo
+import Darwin
 import Foundation
 import VideoToolbox
 
@@ -89,16 +90,17 @@ struct ScrcpyConfiguration {
             args.append("--max-size=\(maxSize)")
         }
 
-        args.append("--bit-rate=\(bitrate)")
+        args.append("--video-bit-rate=\(bitrate)")
         args.append("--max-fps=\(maxFps)")
         args.append("--video-codec=\(videoCodec.rawValue)")
 
         // 关键：不显示窗口，输出原始流
-        args.append("--no-display")
+        // 注意: scrcpy 3.x 已移除 --no-display，使用 --no-playback 替代
+        args.append("--no-playback")
         args.append("--no-audio")
         args.append("--no-control")
 
-        // 输出到 stdout
+        // 视频源为显示器
         args.append("--video-source=display")
 
         if stayAwake {
@@ -151,15 +153,30 @@ struct ScrcpyConfiguration {
 // MARK: - Scrcpy 设备源
 
 /// Scrcpy 设备源实现
-/// 通过 scrcpy 获取原始 H.264/H.265 码流并使用 VideoToolbox 解码
+/// 通过直接与 scrcpy-server 通信获取原始 H.264/H.265 码流并使用 VideoToolbox 解码
 final class ScrcpyDeviceSource: BaseDeviceSource {
+    // MARK: - 常量
+
+    /// scrcpy-server 在设备上的路径
+    private static let serverDevicePath = "/data/local/tmp/scrcpy-server.jar"
+
+    /// 本地监听端口基址
+    private static let basePort = 27183
+
     // MARK: - 属性
 
     private let configuration: ScrcpyConfiguration
-    private var process: Process?
+    private var serverProcess: Process?
     private var decoder: VideoToolboxDecoder?
     private var monitorTask: Task<Void, Never>?
     private var readTask: Task<Void, Never>?
+    private var videoSocket: FileHandle?
+
+    /// 当前使用的端口
+    private var currentPort: Int = 0
+
+    /// 生成的 scid（用于标识客户端）
+    private var scid: UInt32 = 0
 
     private let toolchainManager: ToolchainManager
 
@@ -205,8 +222,10 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
     // MARK: - 连接
 
     override func connect() async throws {
+        AppLogger.connection.info("准备连接 Android 设备: \(configuration.serial), 当前状态: \(state)")
+
         guard state == .idle || state == .disconnected else {
-            AppLogger.connection.warning("设备已连接或正在连接中")
+            AppLogger.connection.warning("设备已连接或正在连接中，当前状态: \(state)")
             return
         }
 
@@ -215,24 +234,28 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
 
         // 检查 scrcpy 是否可用
         let scrcpyReady = await MainActor.run { toolchainManager.scrcpyStatus.isReady }
+        AppLogger.connection.info("scrcpy 状态: \(scrcpyReady ? "就绪" : "未就绪")")
+
         guard scrcpyReady else {
             let error = DeviceSourceError.connectionFailed("scrcpy 未安装")
+            AppLogger.connection.error("连接失败: scrcpy 未安装")
             updateState(.error(error))
             throw error
         }
 
         // 创建 VideoToolbox 解码器
+        AppLogger.connection.info("创建 VideoToolbox 解码器，编解码器: \(configuration.videoCodec.rawValue)")
         decoder = VideoToolboxDecoder(codecType: configuration.videoCodec.fourCC)
         decoder?.onDecodedFrame = { [weak self] pixelBuffer in
             self?.handleDecodedFrame(pixelBuffer)
         }
 
         updateState(.connected)
-        AppLogger.connection.info("设备连接成功: \(displayName)")
+        AppLogger.connection.info("✅ 设备连接成功: \(displayName), 状态: \(state)")
     }
 
     override func disconnect() async {
-        AppLogger.connection.info("断开连接: \(displayName)")
+        AppLogger.connection.info("断开连接: \(displayName), 当前状态: \(state)")
 
         monitorTask?.cancel()
         monitorTask = nil
@@ -241,12 +264,19 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
 
         await stopCapture()
 
-        // 终止 scrcpy 进程
-        if let process, process.isRunning {
-            process.terminate()
-            process.waitUntilExit()
+        // 关闭视频 socket
+        try? videoSocket?.close()
+        videoSocket = nil
+
+        // 终止 scrcpy-server 进程
+        if let serverProcess, serverProcess.isRunning {
+            serverProcess.terminate()
+            serverProcess.waitUntilExit()
         }
-        process = nil
+        serverProcess = nil
+
+        // 移除 adb 端口转发
+        await removeAdbForward()
 
         // 清理解码器
         decoder = nil
@@ -258,7 +288,10 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
     // MARK: - 捕获
 
     override func startCapture() async throws {
+        AppLogger.capture.info("准备开始捕获 Android 设备: \(displayName), 当前状态: \(state)")
+
         guard state == .connected || state == .paused else {
+            AppLogger.capture.error("无法开始捕获: 设备未连接，当前状态: \(state)")
             throw DeviceSourceError.captureStartFailed(L10n.capture.deviceNotConnected)
         }
 
@@ -285,12 +318,19 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
         readTask?.cancel()
         readTask = nil
 
-        // 终止 scrcpy 进程
-        if let process, process.isRunning {
-            process.terminate()
-            process.waitUntilExit()
+        // 关闭视频 socket
+        try? videoSocket?.close()
+        videoSocket = nil
+
+        // 终止 scrcpy-server 进程
+        if let serverProcess, serverProcess.isRunning {
+            serverProcess.terminate()
+            serverProcess.waitUntilExit()
         }
-        process = nil
+        serverProcess = nil
+
+        // 移除 adb 端口转发
+        await removeAdbForward()
 
         if state == .capturing {
             updateState(.connected)
@@ -299,80 +339,254 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
         AppLogger.capture.info("捕获已停止: \(displayName)")
     }
 
-    // MARK: - Scrcpy 进程管理
+    // MARK: - Scrcpy Server 管理
 
+    /// 启动 scrcpy-server 并建立连接
     private func startScrcpyProcess() async throws {
-        // 在主线程获取工具链路径
-        let (scrcpyPath, adbPath, scrcpyServerPath) = await MainActor.run {
-            (toolchainManager.scrcpyPath, toolchainManager.adbPath, toolchainManager.scrcpyServerPath)
+        let (adbPath, scrcpyServerPath) = await MainActor.run {
+            (toolchainManager.adbPath, toolchainManager.scrcpyServerPath)
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: scrcpyPath)
-        process.arguments = configuration.buildRawStreamArguments()
-
-        // 设置环境变量（确保能找到 adb 和 scrcpy-server）
-        var environment = ProcessInfo.processInfo.environment
-        let adbDir = (adbPath as NSString).deletingLastPathComponent
-        environment["PATH"] = "\(adbDir):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-        environment["ADB"] = adbPath
-
-        // 设置 scrcpy-server 路径（内置版本使用 portable 模式）
-        if let serverPath = scrcpyServerPath {
-            environment["SCRCPY_SERVER_PATH"] = serverPath
-            AppLogger.process.info("使用 scrcpy-server: \(serverPath)")
+        guard let serverPath = scrcpyServerPath else {
+            throw DeviceSourceError.captureStartFailed("scrcpy-server 未找到")
         }
 
-        process.environment = environment
+        // 1. 推送 scrcpy-server 到设备
+        try await pushServerToDevice(adbPath: adbPath, serverPath: serverPath)
 
-        // 配置输出管道
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
+        // 2. 设置 adb 端口转发
+        try await setupAdbForward(adbPath: adbPath)
 
-        AppLogger.process
-            .info("启动 scrcpy: \(scrcpyPath) \(configuration.buildRawStreamArguments().joined(separator: " "))")
+        // 3. 启动 scrcpy-server
+        try await startServer(adbPath: adbPath)
 
-        try process.run()
-        self.process = process
+        // 4. 连接到视频流
+        try await connectToVideoStream()
 
-        // 启动视频流读取任务
-        startVideoStreamReader(outputPipe: outputPipe)
+        // 5. 启动视频流读取
+        startVideoStreamReader()
+    }
 
-        // 读取错误输出
-        Task {
-            for try await line in errorPipe.fileHandleForReading.bytes.lines {
-                AppLogger.process.debug("[scrcpy stderr] \(line)")
-            }
+    /// 推送 scrcpy-server 到设备
+    private func pushServerToDevice(adbPath: String, serverPath: String) async throws {
+        AppLogger.process.info("推送 scrcpy-server 到设备...")
+
+        let result = try await runProcess(
+            adbPath,
+            arguments: ["-s", configuration.serial, "push", serverPath, Self.serverDevicePath]
+        )
+
+        if !result.isSuccess {
+            throw DeviceSourceError.captureStartFailed("推送 scrcpy-server 失败: \(result.stderr)")
+        }
+
+        AppLogger.process.info("scrcpy-server 已推送到设备")
+    }
+
+    /// 设置 adb 端口转发
+    private func setupAdbForward(adbPath: String) async throws {
+        // 生成随机 scid（限制在 Java Integer 安全范围内）
+        scid = UInt32.random(in: 10_000_000..<100_000_000)
+        currentPort = Self.basePort
+
+        AppLogger.process.info("设置 adb 端口转发，scid: \(scid)")
+
+        let result = try await runProcess(
+            adbPath,
+            arguments: [
+                "-s", configuration.serial,
+                "forward",
+                "tcp:\(currentPort)",
+                "localabstract:scrcpy_\(scid)",
+            ]
+        )
+
+        if !result.isSuccess {
+            throw DeviceSourceError.captureStartFailed("设置端口转发失败: \(result.stderr)")
+        }
+
+        AppLogger.process.info("端口转发已设置: tcp:\(currentPort) -> localabstract:scrcpy_\(scid)")
+    }
+
+    /// 移除 adb 端口转发
+    private func removeAdbForward() async {
+        guard currentPort > 0 else { return }
+
+        let adbPath = await MainActor.run { toolchainManager.adbPath }
+
+        do {
+            _ = try await runProcess(
+                adbPath,
+                arguments: ["-s", configuration.serial, "forward", "--remove", "tcp:\(currentPort)"]
+            )
+            AppLogger.process.info("已移除端口转发")
+        } catch {
+            AppLogger.process.warning("移除端口转发失败: \(error.localizedDescription)")
         }
     }
 
+    /// 在主线程执行进程（辅助方法）
+    @MainActor
+    private func runProcess(_ executable: String, arguments: [String]) async throws -> ProcessResult {
+        let runner = ProcessRunner()
+        return try await runner.run(executable, arguments: arguments)
+    }
+
+    /// 启动 scrcpy-server
+    private func startServer(adbPath: String) async throws {
+        // 获取 scrcpy 版本（用于服务端验证）
+        let scrcpyVersion = await getScrcpyVersion()
+
+        // 构建服务端参数
+        var serverArgs: [String] = [
+            scrcpyVersion,
+            "scid=\(scid)",
+            "log_level=info",
+            "audio=false",
+            "control=false",
+            "tunnel_forward=true",
+            "send_device_meta=false",
+            "send_frame_meta=false",
+            "send_dummy_byte=false",
+            "send_codec_meta=false",
+            "raw_stream=true",
+        ]
+
+        if configuration.maxSize > 0 {
+            serverArgs.append("max_size=\(configuration.maxSize)")
+        }
+        if configuration.maxFps > 0 {
+            serverArgs.append("max_fps=\(configuration.maxFps)")
+        }
+        if configuration.bitrate > 0 {
+            serverArgs.append("video_bit_rate=\(configuration.bitrate)")
+        }
+        serverArgs.append("video_codec=\(configuration.videoCodec.rawValue)")
+
+        let shellCommand = "CLASSPATH=\(Self.serverDevicePath) app_process / com.genymobile.scrcpy.Server \(serverArgs.joined(separator: " "))"
+
+        AppLogger.process.info("启动 scrcpy-server: \(shellCommand)")
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: adbPath)
+        process.arguments = ["-s", configuration.serial, "shell", shellCommand]
+
+        let errorPipe = Pipe()
+        process.standardError = errorPipe
+        process.standardOutput = Pipe() // 忽略 stdout
+
+        try process.run()
+        serverProcess = process
+
+        // 读取错误输出（提高日志级别以便调试）
+        Task {
+            for try await line in errorPipe.fileHandleForReading.bytes.lines {
+                AppLogger.process.info("[scrcpy-server] \(line)")
+            }
+        }
+
+        // 等待一小段时间让服务端启动
+        try await Task.sleep(nanoseconds: 800_000_000) // 800ms
+
+        // 检查进程是否还在运行
+        guard process.isRunning else {
+            let exitCode = process.terminationStatus
+            throw DeviceSourceError.captureStartFailed("scrcpy-server 启动失败，退出码: \(exitCode)")
+        }
+    }
+
+    /// 获取 scrcpy 版本
+    private func getScrcpyVersion() async -> String {
+        let scrcpyPath = await MainActor.run { toolchainManager.scrcpyPath }
+
+        do {
+            let result = try await runProcess(scrcpyPath, arguments: ["--version"])
+            // 解析版本号，格式如: "scrcpy 3.3.4 <https://...>"
+            if let match = result.stdout.firstMatch(of: /scrcpy\s+(\d+\.\d+(?:\.\d+)?)/) {
+                return String(match.1)
+            }
+        } catch {
+            AppLogger.process.warning("获取 scrcpy 版本失败: \(error.localizedDescription)")
+        }
+
+        // 默认返回一个版本号
+        return "3.3.4"
+    }
+
+    /// 连接到视频流
+    private func connectToVideoStream() async throws {
+        AppLogger.process.info("连接到视频流，端口: \(currentPort)")
+
+        // 创建 TCP 连接
+        var hints = addrinfo()
+        hints.ai_family = AF_INET
+        hints.ai_socktype = SOCK_STREAM
+
+        var result: UnsafeMutablePointer<addrinfo>?
+        let status = getaddrinfo("127.0.0.1", String(currentPort), &hints, &result)
+
+        guard status == 0, let addrInfo = result else {
+            throw DeviceSourceError.captureStartFailed("无法解析地址")
+        }
+
+        defer { freeaddrinfo(result) }
+
+        let sock = Darwin.socket(addrInfo.pointee.ai_family, addrInfo.pointee.ai_socktype, addrInfo.pointee.ai_protocol)
+        guard sock >= 0 else {
+            throw DeviceSourceError.captureStartFailed("无法创建 socket")
+        }
+
+        // 尝试连接，最多重试 5 次
+        var connected = false
+        for attempt in 1...5 {
+            let connectResult = Darwin.connect(sock, addrInfo.pointee.ai_addr, addrInfo.pointee.ai_addrlen)
+            if connectResult == 0 {
+                connected = true
+                break
+            }
+
+            AppLogger.process.debug("连接尝试 \(attempt) 失败，等待后重试...")
+            try await Task.sleep(nanoseconds: 200_000_000) // 200ms
+        }
+
+        guard connected else {
+            Darwin.close(sock)
+            throw DeviceSourceError.captureStartFailed("无法连接到 scrcpy-server")
+        }
+
+        videoSocket = FileHandle(fileDescriptor: sock, closeOnDealloc: true)
+        AppLogger.process.info("已连接到视频流")
+    }
+
     /// 启动视频流读取
-    private func startVideoStreamReader(outputPipe: Pipe) {
+    private func startVideoStreamReader() {
+        guard let videoSocket else {
+            AppLogger.capture.error("视频 socket 未初始化")
+            return
+        }
+
         readTask = Task { [weak self] in
             guard let self else { return }
 
-            let fileHandle = outputPipe.fileHandleForReading
-
             // 读取视频流数据
             while !Task.isCancelled {
-                do {
-                    // 读取数据块
-                    let data = fileHandle.availableData
-                    if data.isEmpty {
-                        try await Task.sleep(nanoseconds: 10_000_000) // 10ms
-                        continue
-                    }
-
-                    // 送入解码器（在专用解码队列异步执行）
-                    decoder?.decode(data: data)
-
-                } catch {
-                    if !Task.isCancelled {
-                        AppLogger.capture.error("读取视频流失败: \(error.localizedDescription)")
-                    }
+                // 读取数据块
+                let data = videoSocket.availableData
+                if data.isEmpty {
+                    // 连接已关闭
+                    AppLogger.capture.info("视频流连接已关闭")
                     break
+                }
+
+                // 送入解码器（在专用解码队列异步执行）
+                decoder?.decode(data: data)
+            }
+
+            // 流结束后更新状态
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                if state == .capturing {
+                    updateState(.error(.captureInterrupted))
                 }
             }
         }
@@ -404,25 +618,28 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
 
     private func startProcessMonitoring() {
         monitorTask = Task { [weak self] in
-            guard let self, let process else { return }
+            guard let self, let serverProcess else { return }
 
             // 等待进程退出
             await withCheckedContinuation { continuation in
-                process.terminationHandler = { _ in
+                serverProcess.terminationHandler = { _ in
                     continuation.resume()
                 }
             }
 
-            let exitCode = process.terminationStatus
+            let exitCode = serverProcess.terminationStatus
 
             await MainActor.run { [weak self] in
                 guard let self else { return }
 
-                if exitCode != 0, state != .disconnected {
-                    AppLogger.connection.error("scrcpy 进程异常退出，退出码: \(exitCode)")
+                // 退出码 0 表示正常退出，15 (SIGTERM) 表示被主动终止（也是正常情况）
+                let isNormalExit = exitCode == 0 || exitCode == 15 // SIGTERM
+
+                if !isNormalExit, state != .disconnected {
+                    AppLogger.connection.error("scrcpy-server 进程异常退出，退出码: \(exitCode)")
                     updateState(.error(.processTerminated(exitCode)))
                 } else {
-                    AppLogger.connection.info("scrcpy 进程正常退出")
+                    AppLogger.connection.info("scrcpy-server 进程正常退出")
                     if state == .capturing {
                         updateState(.connected)
                     }

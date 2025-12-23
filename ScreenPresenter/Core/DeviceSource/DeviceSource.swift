@@ -91,6 +91,7 @@ enum DeviceSourceError: LocalizedError, Equatable {
     case permissionDenied
     case windowNotFound
     case captureStartFailed(String)
+    case captureInterrupted // 捕获中断
     case processTerminated(Int32)
     case timeout
     case deviceInUse(String) // 设备被其他应用占用
@@ -106,6 +107,8 @@ enum DeviceSourceError: LocalizedError, Equatable {
             L10n.error.windowNotFound
         case let .captureStartFailed(reason):
             L10n.error.captureStartFailed(reason)
+        case .captureInterrupted:
+            L10n.error.captureInterrupted
         case let .processTerminated(code):
             L10n.error.processTerminated(code)
         case .timeout:

@@ -180,6 +180,7 @@
 "error.permissionDenied" = "权限被拒绝";
 "error.windowNotFound" = "未找到投屏窗口";
 "error.captureStartFailed" = "捕获启动失败: %@";
+"error.captureInterrupted" = "捕获已中断";
 "error.processTerminated" = "进程已终止 (退出码: %d)";
 "error.timeout" = "连接超时";
 "error.noDevice" = "没有可用的 %@ 设备";

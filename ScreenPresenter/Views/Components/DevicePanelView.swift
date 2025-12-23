@@ -107,6 +107,10 @@ final class DevicePanelView: NSView {
     private var trackingArea: NSTrackingArea?
     private var isMouseInside: Bool = false
 
+    // MARK: - FPS 更新定时器
+
+    private var fpsUpdateTimer: Timer?
+
     // MARK: - 初始化
 
     override init(frame frameRect: NSRect) {
@@ -317,7 +321,7 @@ final class DevicePanelView: NSView {
 
         // 状态文本
         statusLabel = NSTextField(labelWithString: "")
-        statusLabel.font = NSFont.systemFont(ofSize: 18)
+        statusLabel.font = NSFont.systemFont(ofSize: 16)
         statusLabel.textColor = Colors.status
         statusStackView.addArrangedSubview(statusLabel)
 
@@ -343,7 +347,7 @@ final class DevicePanelView: NSView {
 
         // 副标题/提示
         subtitleLabel = NSTextField(labelWithString: "")
-        subtitleLabel.font = NSFont.systemFont(ofSize: 16)
+        subtitleLabel.font = NSFont.systemFont(ofSize: 14)
         subtitleLabel.textColor = Colors.hint
         subtitleLabel.alignment = .center
         subtitleLabel.lineBreakMode = .byWordWrapping
@@ -430,6 +434,7 @@ final class DevicePanelView: NSView {
     func showDisconnected(platform: DevicePlatform, connectionGuide: String) {
         currentState = .disconnected
         currentPlatform = platform
+        stopFPSUpdateTimer()
 
         // 未连接时使用通用边框
         configureBezel(for: platform, deviceName: nil)
@@ -468,6 +473,7 @@ final class DevicePanelView: NSView {
         currentState = .connected
         currentPlatform = platform
         onStartAction = onStart
+        stopFPSUpdateTimer()
 
         // 根据设备名称配置对应的边框
         configureBezel(for: platform, deviceName: deviceName)
@@ -510,6 +516,7 @@ final class DevicePanelView: NSView {
     /// 显示捕获中状态
     func showCapturing(
         deviceName: String,
+        modelName: String?,
         platform: DevicePlatform,
         fps: Double,
         resolution: CGSize,
@@ -518,6 +525,10 @@ final class DevicePanelView: NSView {
         currentState = .capturing
         currentPlatform = platform
         onStopAction = onStop
+
+        // 保存设备信息用于更新状态栏
+        currentDeviceDisplayName = deviceName
+        currentDeviceModelName = modelName
 
         // 根据设备名称和实际分辨率配置边框
         configureBezel(for: platform, deviceName: deviceName, aspectRatio: resolution)
@@ -538,7 +549,8 @@ final class DevicePanelView: NSView {
         layoutSubtreeIfNeeded()
         updateCaptureBarPosition()
 
-        captureStatusLabel.stringValue = L10n.device.capturing
+        // 更新捕获状态文本：显示设备型号和名称
+        updateCaptureStatusText()
 
         if resolution.width > 0, resolution.height > 0 {
             resolutionLabel.stringValue = "\(Int(resolution.width))×\(Int(resolution.height))"
@@ -548,12 +560,16 @@ final class DevicePanelView: NSView {
 
         updateFPS(fps)
         addPulseAnimation(to: captureIndicator)
+
+        // 启动 FPS 更新定时器
+        startFPSUpdateTimer()
     }
 
     /// 显示加载状态
     func showLoading(platform: DevicePlatform) {
         currentState = .loading
         currentPlatform = platform
+        stopFPSUpdateTimer()
 
         // 配置边框外观
         configureBezel(for: platform, deviceName: nil)
@@ -582,6 +598,7 @@ final class DevicePanelView: NSView {
         currentState = .toolchainMissing
         onInstallAction = onInstall
         onStartAction = onInstall
+        stopFPSUpdateTimer()
 
         // 工具链缺失时使用通用 Android 边框
         configureBezel(for: .android, deviceName: nil)
@@ -619,7 +636,7 @@ final class DevicePanelView: NSView {
     /// 设置操作按钮的启用状态
     func setActionButtonEnabled(_ enabled: Bool) {
         actionButton.isEnabled = enabled
-        actionButton.alphaValue = enabled ? 1.0 : 0.5
+        actionButton.alphaValue = enabled ? 1.0 : 0.7
     }
 
     // MARK: - 会话中断状态
@@ -643,8 +660,8 @@ final class DevicePanelView: NSView {
 
     /// 隐藏会话中断提示
     func hideSessionInterrupted() {
-        // 恢复正常状态
-        captureStatusLabel.stringValue = L10n.device.capturing
+        // 恢复正常状态：显示设备型号和名称
+        updateCaptureStatusText()
         captureStatusLabel.textColor = .white
 
         // 恢复捕获指示器
@@ -702,6 +719,24 @@ final class DevicePanelView: NSView {
     // MARK: - 私有方法
 
     private var currentDeviceName: String?
+    private var currentDeviceDisplayName: String?
+    private var currentDeviceModelName: String?
+
+    /// 更新捕获状态文本（显示设备型号和名称）
+    private func updateCaptureStatusText() {
+        // 格式：型号名（设备名）或 设备名
+        if let modelName = currentDeviceModelName, !modelName.isEmpty {
+            if let displayName = currentDeviceDisplayName, !displayName.isEmpty, displayName != modelName {
+                captureStatusLabel.stringValue = "\(modelName)（\(displayName)）"
+            } else {
+                captureStatusLabel.stringValue = modelName
+            }
+        } else if let displayName = currentDeviceDisplayName, !displayName.isEmpty {
+            captureStatusLabel.stringValue = displayName
+        } else {
+            captureStatusLabel.stringValue = L10n.device.capturing
+        }
+    }
 
     private func configureBezel(for platform: DevicePlatform, deviceName: String? = nil, aspectRatio: CGSize? = nil) {
         currentDeviceName = deviceName
@@ -744,6 +779,21 @@ final class DevicePanelView: NSView {
         animation.autoreverses = true
         animation.repeatCount = .infinity
         view.layer?.add(animation, forKey: "pulse")
+    }
+
+    // MARK: - FPS 更新定时器
+
+    private func startFPSUpdateTimer() {
+        stopFPSUpdateTimer()
+        fpsUpdateTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            updateFPS(renderView.fps)
+        }
+    }
+
+    private func stopFPSUpdateTimer() {
+        fpsUpdateTimer?.invalidate()
+        fpsUpdateTimer = nil
     }
 
     // MARK: - 布局
@@ -808,9 +858,8 @@ final class DevicePanelView: NSView {
                 : L10n.overlayUI.captureAndroidHint
 
         case .capturing:
-            if captureStatusLabel.stringValue.hasPrefix("⚠️") == false {
-                captureStatusLabel.stringValue = L10n.device.capturing
-            }
+            // 捕获中显示设备信息，不需要本地化更新
+            break
 
         case .toolchainMissing:
             let toolName = "scrcpy"

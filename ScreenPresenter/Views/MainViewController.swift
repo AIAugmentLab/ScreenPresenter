@@ -379,6 +379,7 @@ final class MainViewController: NSViewController {
         } else if appState.androidCapturing {
             panel.showCapturing(
                 deviceName: appState.androidDeviceName ?? "Android",
+                modelName: appState.androidDeviceName,
                 platform: .android,
                 fps: panel.renderView.fps,
                 resolution: appState.androidDeviceSource?.captureSize ?? .zero,
@@ -446,6 +447,7 @@ final class MainViewController: NSViewController {
 
             panel.showCapturing(
                 deviceName: appState.iosDeviceName ?? "iPhone",
+                modelName: appState.iosDeviceModelName,
                 platform: .ios,
                 fps: panel.renderView.fps,
                 resolution: appState.iosDeviceSource?.captureSize ?? .zero,

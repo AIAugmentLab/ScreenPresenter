@@ -83,3 +83,4 @@ Pods/
 *.temp
 *.orig
 
+*.xcuserstate
