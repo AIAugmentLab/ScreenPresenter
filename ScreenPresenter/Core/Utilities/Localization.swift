@@ -457,6 +457,8 @@ enum L10n {
         static var connectIOS: String { "overlay.connectIOS".localized }
         static var connectAndroid: String { "overlay.connectAndroid".localized }
         static var waitingConnection: String { "overlay.waitingConnection".localized }
+        static var waitingForIPhone: String { "overlay.waitingForIPhone".localized }
+        static var waitingForAndroid: String { "overlay.waitingForAndroid".localized }
         static var deviceReady: String { "overlay.deviceReady".localized }
         static var deviceDetected: String { "overlay.deviceDetected".localized }
         static var captureIOSHint: String { "overlay.captureIOSHint".localized }

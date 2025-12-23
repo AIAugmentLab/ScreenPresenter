@@ -70,24 +70,114 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
 
     /// 设置设备发现会话
     private func setupDiscoverySession() {
-        // 创建发现会话，只监听外部视频设备（iOS 设备）
+        // 检查相机权限
+        let authStatus = AVCaptureDevice.authorizationStatus(for: .video)
+        AppLogger.device.info("相机权限状态: \(authStatus.rawValue) (0=未确定, 1=受限, 2=拒绝, 3=已授权)")
+
+        if authStatus == .notDetermined {
+            // 请求权限
+            AppLogger.device.info("请求相机权限...")
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                AppLogger.device.info("相机权限请求结果: \(granted ? "已授权" : "已拒绝")")
+                if granted {
+                    Task { @MainActor in
+                        self?.refreshDevices()
+                    }
+                }
+            }
+        } else if authStatus == .denied || authStatus == .restricted {
+            AppLogger.device.error("相机权限被拒绝，无法发现 iOS 设备。请在系统偏好设置中授权。")
+            lastError = "相机权限被拒绝"
+        }
+
+        // 创建发现会话，监听外部 muxed 设备（USB 屏幕镜像）
+        // 注意：USB 屏幕镜像设备使用 .muxed 媒体类型，而不是 .video
         discoverySession = AVCaptureDevice.DiscoverySession(
             deviceTypes: [.external],
-            mediaType: .video,
+            mediaType: .muxed,
             position: .unspecified
         )
 
+        AppLogger.device.info("已创建 DiscoverySession，当前设备数: \(discoverySession?.devices.count ?? 0)")
+
         // 监听设备列表变化
-        deviceObservation = discoverySession?.observe(\.devices, options: [.new, .initial]) { [weak self] _, _ in
+        deviceObservation = discoverySession?.observe(\.devices, options: [.new, .initial]) { [weak self] session, _ in
+            AppLogger.device.debug("KVO: 设备列表变化，当前设备数: \(session.devices.count)")
             Task { @MainActor in
                 self?.refreshDevices()
             }
         }
 
+        // 诊断：列出所有视频捕获设备
+        logAllCaptureDevices()
+
         // 立即刷新一次
         refreshDevices()
 
         AppLogger.device.info("iOS 设备监控已启动")
+    }
+
+    /// 诊断：列出所有视频捕获设备（用于调试）
+    private func logAllCaptureDevices() {
+        AppLogger.device.info("=== 诊断：捕获设备检测 ===")
+
+        // 1. 检查 video 媒体类型的外部设备
+        let videoExternalDevices = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.external],
+            mediaType: .video,
+            position: .unspecified
+        ).devices
+        AppLogger.device.info("外部视频设备数: \(videoExternalDevices.count)")
+
+        // 2. 检查 muxed 媒体类型的外部设备（USB 屏幕镜像特征）
+        let muxedExternalDevices = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.external],
+            mediaType: .muxed,
+            position: .unspecified
+        ).devices
+        AppLogger.device.info("外部 muxed 设备数: \(muxedExternalDevices.count)")
+
+        // 3. 列出所有视频设备（不限类型）
+        let allVideoDevices = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInWideAngleCamera, .external, .continuityCamera, .deskViewCamera],
+            mediaType: .video,
+            position: .unspecified
+        ).devices
+
+        if allVideoDevices.isEmpty {
+            AppLogger.device.info("未发现任何视频捕获设备")
+        } else {
+            AppLogger.device.info("所有视频设备列表:")
+            for device in allVideoDevices {
+                let suspended = device.isSuspended ? " [SUSPENDED]" : ""
+                let muxed = device.hasMediaType(.muxed) ? " [MUXED]" : ""
+                AppLogger.device.info("""
+                    - \(device.localizedName)\(suspended)\(muxed)
+                      类型: \(device.deviceType.rawValue)
+                      型号: \(device.modelID)
+                """)
+            }
+        }
+
+        // 4. 检查 muxed 外部设备中的 iOS 设备
+        let iosDevices = muxedExternalDevices.filter {
+            $0.modelID.hasPrefix("iPhone") ||
+                $0.modelID.hasPrefix("iPad") ||
+                $0.modelID == "iOS Device"
+        }
+        if !iosDevices.isEmpty {
+            AppLogger.device.info("发现的 iOS muxed 设备:")
+            for device in iosDevices {
+                let suspended = device.isSuspended ? " [SUSPENDED]" : ""
+                AppLogger.device.info("""
+                    - \(device.localizedName)\(suspended) [MUXED]
+                      类型: \(device.deviceType.rawValue)
+                      型号: \(device.modelID)
+                """)
+            }
+        }
+
+        AppLogger.device.info("=== 诊断结束 ===")
     }
 
     /// 停止监控
@@ -105,10 +195,10 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
     /// 手动刷新设备列表
     func refreshDevices() {
         guard let session = discoverySession else {
-            // 如果没有会话，创建临时查询
+            // 如果没有会话，创建临时查询（使用 muxed 媒体类型）
             let tempSession = AVCaptureDevice.DiscoverySession(
                 deviceTypes: [.external],
-                mediaType: .video,
+                mediaType: .muxed,
                 position: .unspecified
             )
             updateDeviceList(from: tempSession.devices)
@@ -131,6 +221,9 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
     // MARK: - 私有方法
 
     private func updateDeviceList(from captureDevices: [AVCaptureDevice]) {
+        // 记录原始捕获设备数量（用于调试）
+        AppLogger.device.debug("发现 \(captureDevices.count) 个外部视频捕获设备")
+
         let iosDevices = captureDevices.compactMap { device -> IOSDevice? in
             IOSDevice.from(captureDevice: device)
         }
@@ -140,7 +233,11 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
             devices = iosDevices
 
             if iosDevices.isEmpty {
-                AppLogger.device.info("未发现 iOS 设备")
+                if captureDevices.isEmpty {
+                    AppLogger.device.info("未发现任何外部视频设备")
+                } else {
+                    AppLogger.device.info("发现 \(captureDevices.count) 个外部设备，但没有可用的 iOS 屏幕镜像设备")
+                }
             } else {
                 for device in iosDevices {
                     // 使用增强的设备信息显示

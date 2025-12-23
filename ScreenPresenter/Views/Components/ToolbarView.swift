@@ -203,7 +203,7 @@ final class ToolbarView: NSView {
             context.duration = 0.3
             context.allowsImplicitAnimation = true
             if isSwapped {
-                swapButton.contentTintColor = .controlAccentColor
+                swapButton.contentTintColor = .appAccent
             } else {
                 swapButton.contentTintColor = .labelColor
             }

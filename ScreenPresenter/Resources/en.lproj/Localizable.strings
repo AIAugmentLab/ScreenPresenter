@@ -231,6 +231,8 @@
 "overlay.toolNotInstalled" = "%@ Not Installed";
 "overlay.needInstall" = "%@ is required";
 "overlay.installTool" = "Install %@";
+"overlay.waitingForIPhone" = "Waiting for iPhone";
+"overlay.waitingForAndroid" = "Waiting for Android";
 
 // MARK: - Device Info
 "deviceInfo.unknownModel" = "Unknown Model";

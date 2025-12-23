@@ -23,10 +23,10 @@ final class MainViewController: NSViewController {
 
     // MARK: - 设备面板
 
-    /// Android 面板（默认在左侧/上方）
-    private var androidPanelView: DevicePanelView!
-    /// iOS 面板（默认在右侧/下方）
+    /// iOS 面板（默认在左侧/上方）
     private var iosPanelView: DevicePanelView!
+    /// Android 面板（默认在右侧/下方）
+    private var androidPanelView: DevicePanelView!
     private var dividerView: NSBox!
 
     // MARK: - 状态
@@ -123,8 +123,9 @@ final class MainViewController: NSViewController {
         dividerView.snp.removeConstraints()
 
         // 根据 isSwapped 决定哪个面板在主位置（左/上）
-        let primaryPanel = isSwapped ? iosPanelView! : androidPanelView!
-        let secondaryPanel = isSwapped ? androidPanelView! : iosPanelView!
+        // 默认: iOS 在左侧，Android 在右侧
+        let primaryPanel = isSwapped ? androidPanelView! : iosPanelView!
+        let secondaryPanel = isSwapped ? iosPanelView! : androidPanelView!
 
         switch currentLayout {
         case .sideBySide:
@@ -187,8 +188,9 @@ final class MainViewController: NSViewController {
 
     /// 更新渲染器的屏幕区域
     private func updateRenderScreenFrames() {
-        let primaryPanel = isSwapped ? iosPanelView! : androidPanelView!
-        let secondaryPanel = isSwapped ? androidPanelView! : iosPanelView!
+        // 默认: iOS 在左侧，Android 在右侧
+        let primaryPanel = isSwapped ? androidPanelView! : iosPanelView!
+        let secondaryPanel = isSwapped ? iosPanelView! : androidPanelView!
 
         // 获取面板的屏幕区域并转换为 renderView 的坐标系
         let primaryFrame = primaryPanel.convert(primaryPanel.screenFrame, to: renderView)
@@ -236,19 +238,20 @@ final class MainViewController: NSViewController {
     }
 
     private func updateTextures() {
+        // 默认: iOS 在左侧，Android 在右侧
         if let pixelBuffer = AppState.shared.iosDeviceSource?.latestPixelBuffer {
             if isSwapped {
-                renderView.updateLeftTexture(from: pixelBuffer)
-            } else {
                 renderView.updateRightTexture(from: pixelBuffer)
+            } else {
+                renderView.updateLeftTexture(from: pixelBuffer)
             }
         }
 
         if let pixelBuffer = AppState.shared.androidDeviceSource?.latestPixelBuffer {
             if isSwapped {
-                renderView.updateRightTexture(from: pixelBuffer)
-            } else {
                 renderView.updateLeftTexture(from: pixelBuffer)
+            } else {
+                renderView.updateRightTexture(from: pixelBuffer)
             }
         }
     }
@@ -263,8 +266,8 @@ final class MainViewController: NSViewController {
     private func updateAndroidPanel(_ panel: DevicePanelView) {
         let appState = AppState.shared
         let scrcpyReady = appState.toolchainManager.scrcpyStatus.isReady
-        // Android texture 位置: !isSwapped -> left, isSwapped -> right
-        let androidFPS = isSwapped ? renderView.rightFPS : renderView.leftFPS
+        // Android texture 位置: 默认在右侧，交换后在左侧
+        let androidFPS = isSwapped ? renderView.leftFPS : renderView.rightFPS
 
         if !scrcpyReady {
             panel.showToolchainMissing(toolName: "scrcpy") { [weak self] in
@@ -295,8 +298,8 @@ final class MainViewController: NSViewController {
 
     private func updateIOSPanel(_ panel: DevicePanelView) {
         let appState = AppState.shared
-        // iOS texture 位置: !isSwapped -> right, isSwapped -> left
-        let iosFPS = isSwapped ? renderView.leftFPS : renderView.rightFPS
+        // iOS texture 位置: 默认在左侧，交换后在右侧
+        let iosFPS = isSwapped ? renderView.rightFPS : renderView.leftFPS
 
         if appState.iosCapturing {
             panel.showCapturing(

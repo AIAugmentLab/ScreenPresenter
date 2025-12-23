@@ -231,6 +231,8 @@
 "overlay.toolNotInstalled" = "%@ 未安装";
 "overlay.needInstall" = "需要安装 %@";
 "overlay.installTool" = "一键安装 %@";
+"overlay.waitingForIPhone" = "等待 iPhone 连接";
+"overlay.waitingForAndroid" = "等待 Android 连接";
 
 // MARK: - Device Info
 "deviceInfo.unknownModel" = "未知型号";

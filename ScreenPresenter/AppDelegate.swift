@@ -27,14 +27,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupMainMenu()
 
         // 启用 CoreMediaIO 屏幕捕获设备
-        IOSScreenMirrorActivator.shared.enableDALDevices()
+        let dalEnabled = IOSScreenMirrorActivator.shared.enableDALDevices()
+        AppLogger.app.info("DAL 设备启用结果: \(dalEnabled)")
 
         // 创建主窗口
         setupMainWindow()
 
         // 初始化应用状态
         Task {
+            AppLogger.app.info("开始异步初始化应用状态...")
             await AppState.shared.initialize()
+            AppLogger.app.info("应用状态初始化完成")
         }
     }
 

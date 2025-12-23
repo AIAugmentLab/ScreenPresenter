@@ -113,27 +113,43 @@ struct IOSDevice: Identifiable, Hashable {
         let rawName = captureDevice.localizedName
         let modelID = captureDevice.modelID
 
+        // 记录发现的设备（用于调试）
+        AppLogger.device.debug("检测到捕获设备: \(rawName), 类型: \(deviceType.rawValue), 型号: \(modelID)")
+
         // 必须是外部设备类型
         guard deviceType == .external else {
+            AppLogger.device.debug("跳过非外部设备: \(rawName), 类型: \(deviceType.rawValue)")
             return nil
         }
 
         // 检查设备是否真正连接（不是缓存的设备）
         guard !captureDevice.isSuspended else {
+            AppLogger.device.warning("设备处于暂停状态（可能需要信任或解锁）: \(rawName)")
             return nil
         }
 
         // 检查是否是 iOS 设备（通过模型ID判断）
+        // 注意：muxed 设备的 modelID 可能是 "iOS Device" 而不是具体型号
         let isIOSDevice = modelID.hasPrefix("iPhone") ||
             modelID.hasPrefix("iPad") ||
-            modelID.hasPrefix("iPod")
+            modelID.hasPrefix("iPod") ||
+            modelID == "iOS Device"
 
         guard isIOSDevice else {
+            AppLogger.device.debug("跳过非 iOS 设备: \(rawName), 型号: \(modelID)")
+            return nil
+        }
+
+        // 检查是否是 USB 连接的屏幕镜像设备（排除 WiFi 连接的 Continuity Camera）
+        // USB 屏幕镜像支持 muxed 媒体类型（音视频复用），WiFi Continuity Camera 只支持纯视频
+        guard isScreenMirrorDevice(captureDevice, rawName: rawName) else {
+            AppLogger.device.info("跳过 WiFi 连接的设备（Continuity Camera）: \(rawName)")
             return nil
         }
 
         // 额外验证：尝试获取设备确保它真正可用
         guard AVCaptureDevice(uniqueID: captureDevice.uniqueID) != nil else {
+            AppLogger.device.warning("设备验证失败（无法通过 uniqueID 获取设备）: \(rawName)")
             return nil
         }
 
@@ -169,6 +185,55 @@ struct IOSDevice: Identifiable, Hashable {
             insight: insight,
             userPrompt: userPrompt
         )
+    }
+
+    /// 判断是否是 USB 连接的屏幕镜像设备
+    /// 用于区分 USB 屏幕镜像和 WiFi Continuity Camera
+    ///
+    /// 区分方法：
+    /// 1. USB 屏幕镜像支持 .muxed 媒体类型（音视频复用）
+    /// 2. WiFi Continuity Camera 只支持 .video，且设备名称包含 "相机"/"Camera" 等后缀
+    private static func isScreenMirrorDevice(_ device: AVCaptureDevice, rawName: String) -> Bool {
+        let hasMuxed = device.hasMediaType(.muxed)
+
+        // 方法 1：检查是否支持 muxed 媒体类型
+        // USB 连接的屏幕镜像设备支持 muxed（音视频复用）
+        if hasMuxed {
+            AppLogger.device.debug("设备支持 muxed 媒体类型，识别为屏幕镜像: \(rawName)")
+            return true
+        }
+
+        // 方法 2：检查设备名称是否是 Continuity Camera 特征
+        // Continuity Camera 的设备名称通常包含 "相机"、"Camera" 等后缀
+        let continuityNamePatterns = [
+            "的相机",
+            "的桌上视角相机",
+            "的摄像头",
+            "'s Camera",
+            "'s Desk View Camera",
+            " Camera",
+        ]
+
+        for pattern in continuityNamePatterns {
+            if rawName.contains(pattern) {
+                // 名称包含 Camera 相关后缀，是 Continuity Camera
+                AppLogger.device.info("""
+                    设备被识别为 Continuity Camera（WiFi 连接）: \(rawName)
+                    - 不支持 muxed 媒体类型
+                    - 名称包含 '\(pattern)'
+                    提示：如需使用 USB 屏幕镜像，请确保：
+                    1. 使用 USB 线缆连接 iPhone
+                    2. iPhone 已解锁并信任此 Mac
+                    3. 关闭 iPhone 的连续互通相机功能（设置 > 通用 > 隔空播放与接力）
+                """)
+                return false
+            }
+        }
+
+        // 没有 muxed 支持，但名称也不像 Continuity Camera
+        // 保守起见，认为是屏幕镜像设备
+        AppLogger.device.debug("设备不支持 muxed，但名称不像 Continuity Camera，尝试作为屏幕镜像: \(rawName)")
+        return true
     }
 
     /// 清理设备名称，去掉系统添加的后缀

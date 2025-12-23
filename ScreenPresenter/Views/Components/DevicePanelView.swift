@@ -6,6 +6,7 @@
 //
 //  设备面板视图
 //  包含设备边框和状态信息的完整设备展示
+//  设备类型通过边框外观区分，不显示设备图标
 //
 
 import AppKit
@@ -22,8 +23,7 @@ final class DevicePanelView: NSView {
     /// 状态内容容器（显示在边框屏幕区域内）
     private var statusContainerView: NSView!
 
-    // 状态 UI 组件
-    private var iconImageView: NSImageView!
+    // 状态 UI 组件（不再使用图标）
     private var titleLabel: NSTextField!
     private var statusStackView: NSStackView!
     private var statusIndicator: NSView!
@@ -56,10 +56,6 @@ final class DevicePanelView: NSView {
         static let status = NSColor(white: 0.7, alpha: 1.0)
         /// 提示文字颜色（深灰色）
         static let hint = NSColor(white: 0.5, alpha: 1.0)
-        /// 图标颜色（灰色）
-        static let icon = NSColor(white: 0.55, alpha: 1.0)
-        /// 图标高亮颜色
-        static let iconHighlight = NSColor(white: 0.7, alpha: 1.0)
     }
 
     // MARK: - 状态
@@ -109,7 +105,6 @@ final class DevicePanelView: NSView {
         // 状态内容容器（覆盖整个屏幕区域，带有暗色背景）
         statusContainerView = NSView()
         statusContainerView.wantsLayer = true
-        // 深色背景，用于非捕获状态时显示
         statusContainerView.layer?.backgroundColor = NSColor(white: 0.05, alpha: 1.0).cgColor
         bezelView.screenContentView.addSubview(statusContainerView)
         statusContainerView.snp.makeConstraints { make in
@@ -120,23 +115,13 @@ final class DevicePanelView: NSView {
         let contentContainer = NSView()
         statusContainerView.addSubview(contentContainer)
         contentContainer.snp.makeConstraints { make in
-            make.center.equalToSuperview()
-            make.leading.greaterThanOrEqualToSuperview().offset(16)
-            make.trailing.lessThanOrEqualToSuperview().offset(-16)
+            // 降低所有约束优先级，避免父视图宽度为 0 时产生冲突
+            make.center.equalToSuperview().priority(.high)
+            make.leading.greaterThanOrEqualToSuperview().offset(16).priority(.high)
+            make.trailing.lessThanOrEqualToSuperview().offset(-16).priority(.high)
         }
 
-        // 图标
-        iconImageView = NSImageView()
-        iconImageView.imageScaling = .scaleProportionallyUpOrDown
-        iconImageView.contentTintColor = Colors.icon
-        contentContainer.addSubview(iconImageView)
-        iconImageView.snp.makeConstraints { make in
-            make.top.equalToSuperview()
-            make.centerX.equalToSuperview()
-            make.size.equalTo(60)
-        }
-
-        // 标题
+        // 标题（设备名称或提示文案）
         titleLabel = NSTextField(labelWithString: "")
         titleLabel.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
         titleLabel.textColor = Colors.title
@@ -145,7 +130,7 @@ final class DevicePanelView: NSView {
         titleLabel.maximumNumberOfLines = 1
         contentContainer.addSubview(titleLabel)
         titleLabel.snp.makeConstraints { make in
-            make.top.equalTo(iconImageView.snp.bottom).offset(12)
+            make.top.equalToSuperview()
             make.centerX.equalToSuperview()
             make.leading.greaterThanOrEqualToSuperview()
             make.trailing.lessThanOrEqualToSuperview()
@@ -158,7 +143,7 @@ final class DevicePanelView: NSView {
         statusStackView.alignment = .centerY
         contentContainer.addSubview(statusStackView)
         statusStackView.snp.makeConstraints { make in
-            make.top.equalTo(titleLabel.snp.bottom).offset(6)
+            make.top.equalTo(titleLabel.snp.bottom).offset(8)
             make.centerX.equalToSuperview()
         }
 
@@ -179,15 +164,28 @@ final class DevicePanelView: NSView {
         statusStackView.addArrangedSubview(statusLabel)
 
         // 操作按钮
-        actionButton = NSButton(title: L10n.overlayUI.startCapture, target: self, action: #selector(actionTapped))
-        actionButton.bezelStyle = .rounded
+        actionButton = NSButton(title: "", target: self, action: #selector(actionTapped))
+        actionButton.bezelStyle = .smallSquare
         actionButton.controlSize = .regular
-        actionButton.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        actionButton.wantsLayer = true
+        actionButton.isBordered = false
+        actionButton.layer?.cornerRadius = 6
+        actionButton.layer?.backgroundColor = NSColor.appAccent.cgColor
+        // 设置白色文本
+        let buttonFont = NSFont.systemFont(ofSize: 11, weight: .medium)
+        let buttonAttributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.white,
+            .font: buttonFont,
+        ]
+        actionButton.attributedTitle = NSAttributedString(
+            string: L10n.overlayUI.startCapture,
+            attributes: buttonAttributes
+        )
         contentContainer.addSubview(actionButton)
         actionButton.snp.makeConstraints { make in
-            make.top.equalTo(statusStackView.snp.bottom).offset(12)
+            make.top.equalTo(statusStackView.snp.bottom).offset(14)
             make.centerX.equalToSuperview()
-            make.width.greaterThanOrEqualTo(100)
+            make.height.equalTo(28)
         }
 
         // 副标题/提示
@@ -199,7 +197,7 @@ final class DevicePanelView: NSView {
         subtitleLabel.maximumNumberOfLines = 2
         contentContainer.addSubview(subtitleLabel)
         subtitleLabel.snp.makeConstraints { make in
-            make.top.equalTo(actionButton.snp.bottom).offset(6)
+            make.top.equalTo(actionButton.snp.bottom).offset(8)
             make.centerX.equalToSuperview()
             make.leading.greaterThanOrEqualToSuperview()
             make.trailing.lessThanOrEqualToSuperview()
@@ -288,10 +286,8 @@ final class DevicePanelView: NSView {
         statusContainerView.isHidden = false
         captureBarView.isHidden = true
 
-        iconImageView.image = NSImage(named: platform == .ios ? "IOSIcon" : "AndroidIcon")
-        iconImageView.contentTintColor = Colors.icon
-
-        titleLabel.stringValue = platform == .ios ? "iPhone" : "Android"
+        // 通过文案区分设备类型（边框已经展示了设备外观）
+        titleLabel.stringValue = platform == .ios ? L10n.overlayUI.waitingForIPhone : L10n.overlayUI.waitingForAndroid
         titleLabel.textColor = Colors.titleSecondary
 
         statusIndicator.isHidden = true
@@ -322,9 +318,7 @@ final class DevicePanelView: NSView {
         statusContainerView.isHidden = false
         captureBarView.isHidden = true
 
-        iconImageView.image = NSImage(named: platform == .ios ? "IOSIcon" : "AndroidIcon")
-        iconImageView.contentTintColor = Colors.iconHighlight
-
+        // 显示设备名称
         titleLabel.stringValue = deviceName
         titleLabel.textColor = Colors.title
 
@@ -341,7 +335,7 @@ final class DevicePanelView: NSView {
             statusLabel.textColor = Colors.status
         }
 
-        actionButton.title = L10n.overlayUI.startCapture
+        setActionButtonTitle(L10n.overlayUI.startCapture)
         actionButton.isEnabled = true
         actionButton.isHidden = false
 
@@ -392,11 +386,9 @@ final class DevicePanelView: NSView {
         statusContainerView.isHidden = false
         captureBarView.isHidden = true
 
-        iconImageView.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)
-        iconImageView.contentTintColor = .systemOrange
-
+        // 通过文案说明工具链缺失（不使用图标）
         titleLabel.stringValue = L10n.overlayUI.toolNotInstalled(toolName)
-        titleLabel.textColor = Colors.title
+        titleLabel.textColor = .systemOrange
 
         statusStackView.isHidden = false
         statusIndicator.isHidden = false
@@ -404,7 +396,7 @@ final class DevicePanelView: NSView {
         statusLabel.stringValue = L10n.overlayUI.needInstall(toolName)
         statusLabel.textColor = .systemOrange
 
-        actionButton.title = L10n.overlayUI.installTool(toolName)
+        setActionButtonTitle(L10n.overlayUI.installTool(toolName))
         actionButton.isEnabled = true
         actionButton.isHidden = false
 
@@ -445,6 +437,16 @@ final class DevicePanelView: NSView {
         } else {
             bezelView.configure(deviceName: deviceName, platform: platform)
         }
+    }
+
+    /// 设置按钮白色文本标题
+    private func setActionButtonTitle(_ title: String) {
+        let buttonFont = NSFont.systemFont(ofSize: 11, weight: .medium)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.white,
+            .font: buttonFont,
+        ]
+        actionButton.attributedTitle = NSAttributedString(string: title, attributes: attributes)
     }
 
     // MARK: - 操作

@@ -157,7 +157,18 @@ final class MetalRenderer {
 
     /// 渲染到 CAMetalLayer
     func render(to layer: CAMetalLayer) {
-        guard let drawable = layer.nextDrawable() else { return }
+        // 检查 drawable size 是否有效
+        let drawableSize = layer.drawableSize
+        guard drawableSize.width > 0, drawableSize.height > 0 else {
+            // drawable size 无效时跳过渲染（窗口可能尚未布局完成）
+            return
+        }
+
+        guard let drawable = layer.nextDrawable() else {
+            // nextDrawable 返回 nil 通常是正常情况（窗口最小化、资源不足等）
+            // 不需要记录错误日志，避免控制台输出过多
+            return
+        }
         guard let commandBuffer = commandQueue.makeCommandBuffer() else { return }
 
         let renderPassDescriptor = MTLRenderPassDescriptor()
@@ -172,12 +183,6 @@ final class MetalRenderer {
 
         encoder.setRenderPipelineState(pipelineState)
         encoder.setFragmentSamplerState(samplerState, index: 0)
-
-        // 获取 drawable 尺寸
-        let drawableSize = CGSize(
-            width: CGFloat(drawable.texture.width),
-            height: CGFloat(drawable.texture.height)
-        )
 
         // 根据布局模式渲染
         switch layoutMode {

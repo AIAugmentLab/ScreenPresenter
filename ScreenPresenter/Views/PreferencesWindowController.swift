@@ -540,7 +540,7 @@ final class PreferencesViewController: NSViewController {
                 statusLabel.textColor = .systemOrange
             case .installing:
                 statusIcon.image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: nil)
-                statusIcon.contentTintColor = .systemBlue
+                statusIcon.contentTintColor = .appAccent
                 statusLabel.stringValue = L10n.common.checking
             case let .error(message):
                 statusIcon.image = NSImage(
