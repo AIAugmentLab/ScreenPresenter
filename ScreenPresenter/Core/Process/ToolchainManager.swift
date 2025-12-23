@@ -390,7 +390,7 @@ extension ToolchainManager {
         case .installing:
             L10n.prefs.toolchain.installing
         case let .installed(version):
-            "v\(version)"
+            version
         case let .error(message):
             message
         }

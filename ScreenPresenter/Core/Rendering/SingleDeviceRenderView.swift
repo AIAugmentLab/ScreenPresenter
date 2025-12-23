@@ -25,16 +25,19 @@ final class SingleDeviceRenderView: NSView {
     private var textureCache: CVMetalTextureCache?
     private var samplerState: MTLSamplerState?
 
-    // MARK: - 纹理
+    // MARK: - 纹理（保持对 CVMetalTexture 的强引用，防止 MTLTexture 失效）
 
+    private var currentCVTexture: CVMetalTexture?
     private var currentTexture: MTLTexture?
     private let textureLock = NSLock()
 
     // MARK: - 渲染状态
 
-    private var displayLink: CVDisplayLink?
     private(set) var isRendering = false
     private let renderQueue = DispatchQueue(label: "com.screenPresenter.singleRender", qos: .userInteractive)
+
+    /// 标记是否有新帧需要渲染
+    private var needsRender = false
 
     // MARK: - 配置
 
@@ -64,6 +67,10 @@ final class SingleDeviceRenderView: NSView {
 
     deinit {
         stopRendering()
+        // 清理纹理缓存
+        if let cache = textureCache {
+            CVMetalTextureCacheFlush(cache, 0)
+        }
     }
 
     // MARK: - 视图生命周期
@@ -96,11 +103,14 @@ final class SingleDeviceRenderView: NSView {
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         updateDrawableSize()
+        // 尺寸变化时需要重新渲染
+        scheduleRender()
     }
 
     override func setBoundsSize(_ newSize: NSSize) {
         super.setBoundsSize(newSize)
         updateDrawableSize()
+        scheduleRender()
     }
 
     // MARK: - 设置
@@ -191,69 +201,33 @@ final class SingleDeviceRenderView: NSView {
     func startRendering() {
         guard !isRendering else { return }
         isRendering = true
-        setupDisplayLink()
     }
 
     func stopRendering() {
         guard isRendering else { return }
         isRendering = false
-        stopDisplayLink()
     }
 
-    // MARK: - Display Link
+    // MARK: - 按需渲染
 
-    private func setupDisplayLink() {
-        var link: CVDisplayLink?
-        CVDisplayLinkCreateWithActiveCGDisplays(&link)
-
-        guard let displayLink = link else {
-            AppLogger.rendering.error("无法创建 CVDisplayLink")
-            return
-        }
-
-        let callback: CVDisplayLinkOutputCallback = { _, _, _, _, _, userInfo -> CVReturn in
-            guard let userInfo else { return kCVReturnSuccess }
-            let view = Unmanaged<SingleDeviceRenderView>.fromOpaque(userInfo).takeUnretainedValue()
-            view.displayLinkCallback()
-            return kCVReturnSuccess
-        }
-
-        let userInfo = Unmanaged.passUnretained(self).toOpaque()
-        CVDisplayLinkSetOutputCallback(displayLink, callback, userInfo)
-
-        if let screen = window?.screen {
-            let displayID = screen
-                .deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID ?? CGMainDisplayID()
-            CVDisplayLinkSetCurrentCGDisplay(displayLink, displayID)
-        }
-
-        CVDisplayLinkStart(displayLink)
-        self.displayLink = displayLink
-    }
-
-    private func stopDisplayLink() {
-        if let displayLink {
-            CVDisplayLinkStop(displayLink)
-        }
-        displayLink = nil
-    }
-
-    private func displayLinkCallback() {
+    private func scheduleRender() {
         guard isRendering else { return }
-
-        // 渲染当前纹理
+        needsRender = true
         renderQueue.async { [weak self] in
-            self?.renderFrame()
+            self?.renderIfNeeded()
         }
+    }
+
+    private func renderIfNeeded() {
+        guard needsRender else { return }
+        needsRender = false
+        renderFrame()
     }
 
     // MARK: - 纹理更新
 
-    /// 用于追踪上次刷新纹理缓存的时间
-    private var lastCacheFlushTime: CFAbsoluteTime = 0
-
     func updateTexture(from pixelBuffer: CVPixelBuffer) {
-        guard let cache = textureCache else { return }
+        guard isRendering, let cache = textureCache else { return }
 
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
@@ -272,35 +246,43 @@ final class SingleDeviceRenderView: NSView {
         )
 
         guard status == kCVReturnSuccess, let texture = cvTexture else { return }
+        guard let mtlTexture = CVMetalTextureGetTexture(texture) else { return }
 
         textureLock.lock()
-        currentTexture = CVMetalTextureGetTexture(texture)
+        // 保持对 CVMetalTexture 的强引用，确保 MTLTexture 不会失效
+        currentCVTexture = texture
+        currentTexture = mtlTexture
         textureLock.unlock()
 
-        // 定期刷新纹理缓存，防止内存泄漏（每秒刷新一次）
-        let now = CFAbsoluteTimeGetCurrent()
-        if now - lastCacheFlushTime > 1.0 {
-            CVMetalTextureCacheFlush(cache, 0)
-            lastCacheFlushTime = now
-        }
+        // 每帧刷新纹理缓存，立即释放不再使用的纹理
+        CVMetalTextureCacheFlush(cache, 0)
 
         // 更新 FPS 统计
+        let now = CFAbsoluteTimeGetCurrent()
         frameTimestamps.append(now)
         frameTimestamps = frameTimestamps.filter { now - $0 < 1.0 }
         fps = Double(frameTimestamps.count)
+
+        // 触发渲染
+        scheduleRender()
     }
 
     func clearTexture() {
         textureLock.lock()
+        currentCVTexture = nil
         currentTexture = nil
         textureLock.unlock()
+
         fps = 0
         frameTimestamps.removeAll()
 
-        // 清除画面
-        renderQueue.async { [weak self] in
-            self?.renderFrame()
+        // 刷新纹理缓存
+        if let cache = textureCache {
+            CVMetalTextureCacheFlush(cache, 0)
         }
+
+        // 清除画面
+        scheduleRender()
     }
 
     // MARK: - 渲染

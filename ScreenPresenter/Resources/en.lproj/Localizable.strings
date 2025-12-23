@@ -13,6 +13,7 @@
 "common.ok" = "OK";
 "common.cancel" = "Cancel";
 "common.close" = "Close";
+"common.copy" = "Copy";
 "common.refresh" = "Refresh";
 "common.install" = "Install";
 "common.version" = "Version";
@@ -20,6 +21,7 @@
 "common.error" = "Error";
 "common.unknown" = "Unknown";
 "common.checking" = "Checking...";
+"common.loading" = "Loading...";
 
 // MARK: - Menu
 "menu.about" = "About ScreenPresenter";
@@ -110,9 +112,9 @@
 "prefs.appearance.backgroundOpacity" = "Background Opacity";
 
 // MARK: - Preferences - Layout
-"prefs.layout.devicePosition" = "Device Position";
-"prefs.layout.iosOnLeft" = "Left iOS | Right Android";
-"prefs.layout.androidOnLeft" = "Left Android | Right iOS";
+"prefs.layout.devicePosition" = "Default Device Layout";
+"prefs.layout.iosOnLeft" = "iOS | Android";
+"prefs.layout.androidOnLeft" = "Android | iOS";
 
 // MARK: - Preferences - Connection
 "prefs.connection.autoReconnect" = "Auto Reconnect";
@@ -145,7 +147,7 @@
 "prefs.toolchain.installScrcpy" = "Install scrcpy (Homebrew)";
 "prefs.toolchain.notInstalled" = "Not Installed";
 "prefs.toolchain.installing" = "Installing...";
-"prefs.toolchain.bundled" = "Bundled v%@";
+"prefs.toolchain.bundled" = "Bundled %@";
 "prefs.toolchain.adbDesc" = "Android Debug Bridge";
 "prefs.toolchain.scrcpyDesc" = "Android Screen Mirror Tool";
 
@@ -171,6 +173,7 @@
 "ios.hint.occupiedUnknown" = "Device is occupied by another app, please close it and try again";
 "ios.hint.locked" = "Device is locked/sleeping, please unlock and try again";
 "ios.hint.otherApp" = "another app";
+"ios.hint.sessionStopped" = "Capture session stopped";
 
 // MARK: - Errors
 "error.connectionFailed" = "Connection failed: %@";
@@ -185,6 +188,7 @@
 // MARK: - Toolbar
 "toolbar.refresh" = "Refresh";
 "toolbar.refreshing" = "Refreshing...";
+"toolbar.refreshComplete" = "Device list refreshed";
 "toolbar.swap" = "Swap";
 "toolbar.preferences" = "Preferences";
 "toolbar.swap.tooltip" = "Swap device positions";
@@ -219,6 +223,7 @@
 // MARK: - Overlay
 "overlay.startCapture" = "Start Mirroring";
 "overlay.stop" = "Stop";
+"overlay.captureStopped" = "%@ mirroring stopped";
 "overlay.connectDevice" = "Connect device via USB cable";
 "overlay.connectIOS" = "Connect iPhone via USB cable";
 "overlay.connectAndroid" = "Connect Android device via USB cable";
@@ -239,7 +244,7 @@
 "deviceInfo.unknown" = "Unknown";
 
 // MARK: - Toolchain Errors
-"toolchain.bundled" = "Bundled v%@";
+"toolchain.bundled" = "Bundled %@";
 "toolchain.notFound.adb" = "adb not found";
 "toolchain.notFound.scrcpy" = "scrcpy not found";
 "toolchain.installHomebrew" = "Please install Homebrew first";

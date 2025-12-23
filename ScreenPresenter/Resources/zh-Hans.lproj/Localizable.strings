@@ -6,13 +6,14 @@
 */
 
 // MARK: - App
-"app.name" = "ScreenPresenter";
+"app.name" = "演示台";
 "app.description" = "macOS 设备投屏工具\n同时展示 iOS 和 Android 设备屏幕";
 
 // MARK: - Common
 "common.ok" = "确定";
 "common.cancel" = "取消";
 "common.close" = "关闭";
+"common.copy" = "复制";
 "common.refresh" = "刷新";
 "common.install" = "安装";
 "common.version" = "版本";
@@ -20,6 +21,7 @@
 "common.error" = "错误";
 "common.unknown" = "未知";
 "common.checking" = "检查中...";
+"common.loading" = "加载中...";
 
 // MARK: - Menu
 "menu.about" = "关于 ScreenPresenter";
@@ -40,7 +42,7 @@
 
 // MARK: - Window
 "window.preferences" = "偏好设置";
-"window.main" = "ScreenPresenter";
+"window.main" = "演示台";
 
 // MARK: - Device Status
 "device.connected" = "已连接";
@@ -110,9 +112,9 @@
 "prefs.appearance.backgroundOpacity" = "背景透明度";
 
 // MARK: - Preferences - Layout
-"prefs.layout.devicePosition" = "设备位置";
-"prefs.layout.iosOnLeft" = "左 iOS | 右 Android";
-"prefs.layout.androidOnLeft" = "左 Android | 右 iOS";
+"prefs.layout.devicePosition" = "默认设备布局";
+"prefs.layout.iosOnLeft" = "iOS | Android";
+"prefs.layout.androidOnLeft" = "Android | iOS";
 
 // MARK: - Preferences - Connection
 "prefs.connection.autoReconnect" = "自动重连";
@@ -145,7 +147,7 @@
 "prefs.toolchain.installScrcpy" = "安装 scrcpy (Homebrew)";
 "prefs.toolchain.notInstalled" = "未安装";
 "prefs.toolchain.installing" = "安装中...";
-"prefs.toolchain.bundled" = "内嵌 v%@";
+"prefs.toolchain.bundled" = "内嵌 %@";
 "prefs.toolchain.adbDesc" = "Android 调试工具";
 "prefs.toolchain.scrcpyDesc" = "Android 投屏工具";
 
@@ -171,6 +173,7 @@
 "ios.hint.occupiedUnknown" = "设备被其他应用占用，请关闭后重试";
 "ios.hint.locked" = "设备已锁屏/息屏，请解锁后重试";
 "ios.hint.otherApp" = "其他应用";
+"ios.hint.sessionStopped" = "捕获会话已停止";
 
 // MARK: - Errors
 "error.connectionFailed" = "连接失败: %@";
@@ -185,6 +188,7 @@
 // MARK: - Toolbar
 "toolbar.refresh" = "刷新";
 "toolbar.refreshing" = "刷新中...";
+"toolbar.refreshComplete" = "设备列表已刷新";
 "toolbar.swap" = "交换";
 "toolbar.preferences" = "偏好设置";
 "toolbar.swap.tooltip" = "交换设备位置";
@@ -219,6 +223,7 @@
 // MARK: - Overlay
 "overlay.startCapture" = "开始投屏";
 "overlay.stop" = "停止";
+"overlay.captureStopped" = "%@ 投屏已停止";
 "overlay.connectDevice" = "使用 USB 数据线连接设备";
 "overlay.connectIOS" = "使用 USB 数据线连接 iPhone";
 "overlay.connectAndroid" = "使用 USB 数据线连接 Android 设备";
@@ -239,7 +244,7 @@
 "deviceInfo.unknown" = "未知";
 
 // MARK: - Toolchain Errors
-"toolchain.bundled" = "内嵌 v%@";
+"toolchain.bundled" = "内嵌 %@";
 "toolchain.notFound.adb" = "未找到 adb";
 "toolchain.notFound.scrcpy" = "未找到 scrcpy";
 "toolchain.installHomebrew" = "请先安装 Homebrew";

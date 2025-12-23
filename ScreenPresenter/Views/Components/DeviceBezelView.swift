@@ -25,6 +25,10 @@ final class DeviceBezelView: NSView {
     /// 设备整体的宽高比（包含边框，用于外部布局参考）
     private(set) var aspectRatio: CGFloat = 9.0 / 19.0
 
+    /// 顶部特征（刘海/灵动岛/摄像头开孔）的底部 Y 坐标
+    /// 相对于 screenContentView 的顶部（向下为正），用于 captureBar 定位
+    private(set) var topFeatureBottomInset: CGFloat = 0
+
     // MARK: - UI 组件
 
     private var bezelLayer: CAShapeLayer!
@@ -179,8 +183,12 @@ final class DeviceBezelView: NSView {
         aspectRatio = deviceAspect
 
         let bezelWidth = deviceWidth * bezelRatio
-        let bezelCornerRadius = deviceWidth * deviceModel.bezelCornerRadiusRatio
+
+        // 屏幕圆角（内圆角）
         let screenCornerRadius = deviceWidth * deviceModel.screenCornerRadiusRatio
+
+        // 外圆角 = 内圆角 + 边框宽度（物理正确的圆角关系）
+        let bezelCornerRadius = screenCornerRadius + bezelWidth
 
         // 计算屏幕区域
         var screenRect = deviceRect.insetBy(dx: bezelWidth, dy: bezelWidth)
@@ -196,6 +204,15 @@ final class DeviceBezelView: NSView {
             )
         }
 
+        // 像素对齐：确保 screenRect 对齐到整像素
+        let scale = window?.backingScaleFactor ?? 2.0
+        screenRect = CGRect(
+            x: round(screenRect.minX * scale) / scale,
+            y: round(screenRect.minY * scale) / scale,
+            width: round(screenRect.width * scale) / scale,
+            height: round(screenRect.height * scale) / scale
+        )
+
         // 外边缘高光
         let outerRect = deviceRect.insetBy(dx: -0.5, dy: -0.5)
         outerHighlightLayer.strokeColor = deviceModel.bezelHighlightColor.withAlphaComponent(0.3).cgColor
@@ -205,7 +222,7 @@ final class DeviceBezelView: NSView {
             yRadius: bezelCornerRadius + 0.5
         ).cgPath
 
-        // 主边框（中间镂空）
+        // 主边框（中间镂空）- 使用 screenRect 确保完全匹配
         drawBezelWithGradient(
             rect: deviceRect,
             cornerRadius: bezelCornerRadius,
@@ -213,19 +230,19 @@ final class DeviceBezelView: NSView {
             screenCornerRadius: screenCornerRadius
         )
 
-        // 内边缘高光
-        let innerHighlightRect = deviceRect.insetBy(dx: bezelWidth - 0.5, dy: bezelWidth - 0.5)
+        // 内边缘高光（紧贴屏幕边缘）
         innerHighlightLayer.strokeColor = deviceModel.bezelHighlightColor.withAlphaComponent(0.15).cgColor
         innerHighlightLayer.path = NSBezierPath(
-            roundedRect: innerHighlightRect,
-            xRadius: screenCornerRadius + 0.5,
-            yRadius: screenCornerRadius + 0.5
+            roundedRect: screenRect,
+            xRadius: screenCornerRadius,
+            yRadius: screenCornerRadius
         ).cgPath
 
         // 屏幕区域路径
         let screenPath = NSBezierPath(roundedRect: screenRect, xRadius: screenCornerRadius, yRadius: screenCornerRadius)
         screenLayer.path = screenPath.cgPath
 
+        // screenContentView 完全匹配 screenRect
         screenContentView.frame = screenRect
         screenContentView.layer?.cornerRadius = screenCornerRadius
 
@@ -263,6 +280,9 @@ final class DeviceBezelView: NSView {
         homeButtonLayer?.removeFromSuperlayer()
         homeButtonLayer = nil
 
+        // 重置顶部特征的底部位置
+        topFeatureBottomInset = 0
+
         switch deviceModel.topFeature {
         case .none:
             break
@@ -271,13 +291,17 @@ final class DeviceBezelView: NSView {
             let islandWidth = screenRect.width * widthRatio
             let islandHeight = screenRect.width * heightRatio
             let islandCornerRadius = islandHeight / 2
+            let islandTopMargin = screenRect.width * 0.028
 
             let islandRect = CGRect(
                 x: screenRect.midX - islandWidth / 2,
-                y: screenRect.maxY - islandHeight - screenRect.width * 0.028,
+                y: screenRect.maxY - islandHeight - islandTopMargin,
                 width: islandWidth,
                 height: islandHeight
             )
+
+            // 计算顶部特征底部距离屏幕顶部的偏移
+            topFeatureBottomInset = islandTopMargin + islandHeight
 
             let layer = CAShapeLayer()
             layer.fillColor = NSColor.black.cgColor
@@ -294,6 +318,9 @@ final class DeviceBezelView: NSView {
             let notchWidth = screenRect.width * widthRatio
             let notchHeight = screenRect.width * heightRatio
             let notchCornerRadius = notchHeight * 0.45
+
+            // 刘海从屏幕顶部开始向下延伸
+            topFeatureBottomInset = notchHeight
 
             let notchPath = createNotchPath(
                 centerX: screenRect.midX,
@@ -312,6 +339,9 @@ final class DeviceBezelView: NSView {
         case let .punchHole(position, sizeRatio):
             let holeSize = screenRect.width * sizeRatio
             let margin = screenRect.width * 0.045
+
+            // 计算顶部特征底部距离屏幕顶部的偏移
+            topFeatureBottomInset = margin + holeSize
 
             let holeX: CGFloat = switch position {
             case .center:

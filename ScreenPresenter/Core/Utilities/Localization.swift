@@ -156,6 +156,7 @@ enum L10n {
         static var ok: String { "common.ok".localized }
         static var cancel: String { "common.cancel".localized }
         static var close: String { "common.close".localized }
+        static var copy: String { "common.copy".localized }
         static var refresh: String { "common.refresh".localized }
         static var install: String { "common.install".localized }
         static var version: String { "common.version".localized }
@@ -163,6 +164,7 @@ enum L10n {
         static var error: String { "common.error".localized }
         static var unknown: String { "common.unknown".localized }
         static var checking: String { "common.checking".localized }
+        static var loading: String { "common.loading".localized }
     }
 
     // MARK: - Menu
@@ -383,6 +385,7 @@ enum L10n {
             static var occupiedUnknown: String { "ios.hint.occupiedUnknown".localized }
             static var locked: String { "ios.hint.locked".localized }
             static var otherApp: String { "ios.hint.otherApp".localized }
+            static var sessionStopped: String { "ios.hint.sessionStopped".localized }
         }
     }
 
@@ -406,6 +409,7 @@ enum L10n {
     enum toolbar {
         static var refresh: String { "toolbar.refresh".localized }
         static var refreshing: String { "toolbar.refreshing".localized }
+        static var refreshComplete: String { "toolbar.refreshComplete".localized }
         static var swap: String { "toolbar.swap".localized }
         static var preferences: String { "toolbar.preferences".localized }
         static var swapTooltip: String { "toolbar.swap.tooltip".localized }
@@ -452,6 +456,7 @@ enum L10n {
     enum overlayUI {
         static var startCapture: String { "overlay.startCapture".localized }
         static var stop: String { "overlay.stop".localized }
+        static func captureStopped(_ platform: String) -> String { "overlay.captureStopped".localized(platform) }
         static var connectDevice: String { "overlay.connectDevice".localized }
         static var connectIOS: String { "overlay.connectIOS".localized }
         static var connectAndroid: String { "overlay.connectAndroid".localized }

@@ -34,8 +34,8 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
 
     // MARK: - 配置
 
-    /// 状态刷新间隔（秒）— 用于检测信任/占用状态变化
-    private let insightRefreshInterval: TimeInterval = 5.0
+    /// 状态刷新间隔（秒）— 用于检测锁屏/占用状态变化
+    private let insightRefreshInterval: TimeInterval = 2.0
 
     // MARK: - 私有属性
 
@@ -228,8 +228,11 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
             IOSDevice.from(captureDevice: device)
         }
 
-        // 只在设备列表真正变化时更新
-        if iosDevices.map(\.id) != devices.map(\.id) {
+        // 检查设备列表或状态是否变化
+        let hasDeviceChanges = iosDevices.map(\.id) != devices.map(\.id)
+        let hasStateChanges = !hasDeviceChanges && hasDeviceStateChanges(iosDevices)
+
+        if hasDeviceChanges || hasStateChanges {
             devices = iosDevices
 
             if iosDevices.isEmpty {
@@ -242,10 +245,30 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
                 for device in iosDevices {
                     // 使用增强的设备信息显示
                     let displayInfo = buildDeviceDisplayInfo(device)
-                    AppLogger.device.info("iOS 设备已更新: \(displayInfo)")
+                    if hasDeviceChanges {
+                        AppLogger.device.info("iOS 设备已更新: \(displayInfo)")
+                    }
                 }
             }
         }
+    }
+
+    /// 检查设备状态（锁屏、占用等）是否发生变化
+    private func hasDeviceStateChanges(_ newDevices: [IOSDevice]) -> Bool {
+        for newDevice in newDevices {
+            guard let oldDevice = devices.first(where: { $0.id == newDevice.id }) else {
+                continue
+            }
+
+            // 比较关键状态
+            if
+                newDevice.isLocked != oldDevice.isLocked ||
+                newDevice.isOccupied != oldDevice.isOccupied ||
+                newDevice.userPrompt != oldDevice.userPrompt {
+                return true
+            }
+        }
+        return false
     }
 
     /// 构建设备显示信息（用于日志和诊断）
@@ -299,6 +322,8 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
     private func refreshDeviceInsights() async {
         guard let session = discoverySession else { return }
 
+        AppLogger.device.debug("开始刷新设备状态，当前设备数: \(devices.count)")
+
         var hasChanges = false
 
         for captureDevice in session.devices {
@@ -315,14 +340,20 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
             let oldPrompt = existingDevice.userPrompt
             let oldIsLocked = existingDevice.isLocked
             let newIsLocked = newInsight.isLocked
+            let oldIsOccupied = existingDevice.isOccupied
+            let newIsOccupied = newInsight.isOccupied
 
-            if newPrompt != oldPrompt || oldIsLocked != newIsLocked {
+            if newPrompt != oldPrompt || oldIsLocked != newIsLocked || oldIsOccupied != newIsOccupied {
                 hasChanges = true
 
                 if newIsLocked, !oldIsLocked {
-                    AppLogger.device.warning("设备已锁屏/息屏: \(existingDevice.displayName)")
+                    AppLogger.device.warning("🔒 设备已锁屏/息屏: \(existingDevice.displayName)")
                 } else if !newIsLocked, oldIsLocked {
-                    AppLogger.device.info("设备已解锁: \(existingDevice.displayName)")
+                    AppLogger.device.info("🔓 设备已解锁: \(existingDevice.displayName)")
+                } else if newIsOccupied, !oldIsOccupied {
+                    AppLogger.device.warning("⚠️ 设备被占用: \(existingDevice.displayName)")
+                } else if !newIsOccupied, oldIsOccupied {
+                    AppLogger.device.info("✅ 设备占用已释放: \(existingDevice.displayName)")
                 } else if let prompt = newPrompt, prompt != oldPrompt {
                     AppLogger.device.warning("设备状态变化: \(existingDevice.displayName) - \(prompt)")
                 } else if oldPrompt != nil, newPrompt == nil {
@@ -333,6 +364,7 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
 
         // 如果有变化，完整刷新设备列表（会触发 UI 更新）
         if hasChanges {
+            AppLogger.device.info("检测到设备状态变化，刷新设备列表")
             refreshDevices()
         }
     }

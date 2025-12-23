@@ -27,18 +27,8 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
     /// 是否支持音频
     override var supportsAudio: Bool { true }
 
-    /// 最新的 CVPixelBuffer 存储（需要线程同步）
-    private var _latestPixelBuffer: CVPixelBuffer?
-
-    /// 用于保护 _latestPixelBuffer 的读写锁
-    private let pixelBufferLock = NSLock()
-
-    /// 最新的 CVPixelBuffer（供渲染使用，线程安全）
-    override var latestPixelBuffer: CVPixelBuffer? {
-        pixelBufferLock.lock()
-        defer { pixelBufferLock.unlock() }
-        return _latestPixelBuffer
-    }
+    /// 最新的 CVPixelBuffer（仅用于获取尺寸信息，不长期持有）
+    override var latestPixelBuffer: CVPixelBuffer? { nil }
 
     // MARK: - 私有属性
 
@@ -54,6 +44,12 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
 
     /// 帧回调
     var onFrame: ((CVPixelBuffer) -> Void)?
+
+    /// 会话中断回调（设备锁屏等）
+    var onSessionInterrupted: ((String) -> Void)?
+
+    /// 会话恢复回调
+    var onSessionResumed: (() -> Void)?
 
     // MARK: - 初始化
 
@@ -109,14 +105,16 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
 
         await stopCapture()
 
+        // 移除通知监听
+        NotificationCenter.default.removeObserver(self)
+
         captureSession?.stopRunning()
         captureSession = nil
         videoOutput = nil
         videoDelegate = nil
-
-        pixelBufferLock.lock()
-        _latestPixelBuffer = nil
-        pixelBufferLock.unlock()
+        onFrame = nil
+        onSessionInterrupted = nil
+        onSessionResumed = nil
 
         hasReceivedFirstFrame = false
 
@@ -270,7 +268,77 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
         self.videoOutput = videoOutput
         videoDelegate = delegate
 
+        // 监听会话中断和恢复通知
+        setupSessionNotifications(for: session)
+
         AppLogger.capture.info("iOS 捕获会话已配置: \(iosDevice.name)")
+    }
+
+    // MARK: - 会话通知
+
+    private func setupSessionNotifications(for session: AVCaptureSession) {
+        // 会话开始运行
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(sessionDidStartRunning),
+            name: .AVCaptureSessionDidStartRunning,
+            object: session
+        )
+
+        // 会话停止运行
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(sessionDidStopRunning),
+            name: .AVCaptureSessionDidStopRunning,
+            object: session
+        )
+
+        // 会话运行时错误
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(sessionRuntimeError),
+            name: .AVCaptureSessionRuntimeError,
+            object: session
+        )
+    }
+
+    @objc private func sessionDidStartRunning(_: Notification) {
+        AppLogger.capture.info("🎬 捕获会话开始运行")
+        DispatchQueue.main.async { [weak self] in
+            self?.onSessionResumed?()
+        }
+    }
+
+    @objc private func sessionDidStopRunning(_: Notification) {
+        // 如果不是主动停止，则是中断
+        guard isCapturingFlag else { return }
+
+        AppLogger.capture.warning("⚠️ 捕获会话意外停止")
+        DispatchQueue.main.async { [weak self] in
+            self?.onSessionInterrupted?(L10n.ios.hint.sessionStopped)
+        }
+    }
+
+    @objc private func sessionRuntimeError(_ notification: Notification) {
+        guard let error = notification.userInfo?[AVCaptureSessionErrorKey] as? NSError else {
+            AppLogger.capture.error("会话运行时错误（未知）")
+            return
+        }
+
+        AppLogger.capture.error("会话运行时错误: \(error.localizedDescription)")
+
+        // 通知 UI 显示错误
+        DispatchQueue.main.async { [weak self] in
+            self?.onSessionInterrupted?(error.localizedDescription)
+        }
+
+        // 尝试恢复会话
+        captureQueue.async { [weak self] in
+            guard let self, isCapturingFlag else { return }
+            if let session = captureSession, !session.isRunning {
+                session.startRunning()
+            }
+        }
     }
 
     // MARK: - 帧处理
@@ -294,16 +362,11 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
             AppLogger.capture.info("iOS 捕获分辨率: \(width)x\(height)")
         }
 
-        // 更新最新帧（线程安全）
-        pixelBufferLock.lock()
-        _latestPixelBuffer = pixelBuffer
-        pixelBufferLock.unlock()
-
         // 创建 CapturedFrame 并发送
         let frame = CapturedFrame(sourceID: id, sampleBuffer: sampleBuffer)
         emitFrame(frame)
 
-        // 回调通知
+        // 直接回调通知渲染视图（不持有 pixelBuffer）
         onFrame?(pixelBuffer)
     }
 }

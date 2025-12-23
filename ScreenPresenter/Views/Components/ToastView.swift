@@ -1,0 +1,239 @@
+//
+//  ToastView.swift
+//  ScreenPresenter
+//
+//  Created by Sun on 2025/12/23.
+//
+//  Toast 提示视图
+//  支持成功、失败、警告、信息等状态
+//  支持复制按钮
+//
+
+import AppKit
+
+// MARK: - Toast 样式
+
+enum ToastStyle {
+    case success
+    case error
+    case warning
+    case info
+
+    var icon: String {
+        switch self {
+        case .success: "checkmark.circle.fill"
+        case .error: "xmark.circle.fill"
+        case .warning: "exclamationmark.triangle.fill"
+        case .info: "info.circle.fill"
+        }
+    }
+
+    var iconColor: NSColor {
+        switch self {
+        case .success: .systemGreen
+        case .error: .systemRed
+        case .warning: .systemOrange
+        case .info: .systemBlue
+        }
+    }
+}
+
+// MARK: - Toast 视图
+
+final class ToastView: NSView {
+    // MARK: - UI 组件
+
+    private let iconView: NSImageView
+    private let label: NSTextField
+    private let copyButton: NSButton
+    private let stackView: NSStackView
+
+    // MARK: - 属性
+
+    private let message: String
+    private let style: ToastStyle
+    private let copyable: Bool
+
+    // MARK: - 初始化
+
+    init(message: String, style: ToastStyle = .info, copyable: Bool = false) {
+        self.message = message
+        self.style = style
+        self.copyable = copyable
+
+        // 初始化 UI 组件
+        iconView = NSImageView()
+        label = NSTextField(labelWithString: message)
+        copyButton = NSButton()
+        stackView = NSStackView()
+
+        super.init(frame: .zero)
+
+        setupUI()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    // MARK: - UI 设置
+
+    private func setupUI() {
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        layer?.cornerRadius = 10
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowOpacity = 0.2
+        layer?.shadowOffset = CGSize(width: 0, height: -2)
+        layer?.shadowRadius = 10
+
+        // 图标
+        let iconImage = NSImage(systemSymbolName: style.icon, accessibilityDescription: nil)
+        iconView.image = iconImage
+        iconView.contentTintColor = style.iconColor
+        iconView.setContentHuggingPriority(.required, for: .horizontal)
+
+        // 文本
+        label.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        label.textColor = .labelColor
+        label.alignment = .left
+        label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = 2
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        // 复制按钮
+        copyButton.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: L10n.common.copy)
+        copyButton.bezelStyle = .inline
+        copyButton.isBordered = false
+        copyButton.contentTintColor = .secondaryLabelColor
+        copyButton.target = self
+        copyButton.action = #selector(copyTapped)
+        copyButton.toolTip = L10n.common.copy
+        copyButton.isHidden = !copyable
+        copyButton.setContentHuggingPriority(.required, for: .horizontal)
+
+        // 堆栈布局
+        stackView.orientation = .horizontal
+        stackView.spacing = 10
+        stackView.alignment = .centerY
+        stackView.edgeInsets = NSEdgeInsets(top: 12, left: 14, bottom: 12, right: 14)
+        stackView.addArrangedSubview(iconView)
+        stackView.addArrangedSubview(label)
+        if copyable {
+            stackView.addArrangedSubview(copyButton)
+        }
+
+        addSubview(stackView)
+
+        // 约束
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        copyButton.translatesAutoresizingMaskIntoConstraints = false
+
+        NSLayoutConstraint.activate([
+            stackView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stackView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stackView.topAnchor.constraint(equalTo: topAnchor),
+            stackView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            iconView.widthAnchor.constraint(equalToConstant: 18),
+            iconView.heightAnchor.constraint(equalToConstant: 18),
+
+            copyButton.widthAnchor.constraint(equalToConstant: 20),
+            copyButton.heightAnchor.constraint(equalToConstant: 20),
+        ])
+    }
+
+    // MARK: - 操作
+
+    @objc private func copyTapped() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(message, forType: .string)
+
+        // 复制成功反馈：图标临时变成勾
+        let originalImage = copyButton.image
+        copyButton.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
+        copyButton.contentTintColor = .systemGreen
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.copyButton.image = originalImage
+            self?.copyButton.contentTintColor = .secondaryLabelColor
+        }
+    }
+
+    // MARK: - 静态方法
+
+    /// 在指定窗口显示 Toast
+    /// - Parameters:
+    ///   - message: 提示信息
+    ///   - style: 样式（默认 .info）
+    ///   - copyable: 是否可复制（默认 false）
+    ///   - duration: 显示时长（默认 2.5 秒）
+    ///   - window: 目标窗口
+    @MainActor
+    static func show(
+        _ message: String,
+        style: ToastStyle = .info,
+        copyable: Bool = false,
+        duration: TimeInterval = 2.5,
+        in window: NSWindow?
+    ) {
+        guard let window, let contentView = window.contentView else { return }
+
+        let toast = ToastView(message: message, style: style, copyable: copyable)
+        toast.alphaValue = 0
+        contentView.addSubview(toast)
+
+        // 约束
+        toast.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            toast.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            toast.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 44),
+            toast.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.8),
+            toast.widthAnchor.constraint(greaterThanOrEqualToConstant: 200),
+        ])
+
+        // 淡入动画
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.25
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            toast.animator().alphaValue = 1.0
+        }
+
+        // 延迟后淡出并移除
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.3
+                context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                toast.animator().alphaValue = 0.0
+            } completionHandler: {
+                toast.removeFromSuperview()
+            }
+        }
+    }
+
+    /// 显示成功提示
+    @MainActor
+    static func success(_ message: String, in window: NSWindow?) {
+        show(message, style: .success, in: window)
+    }
+
+    /// 显示错误提示
+    @MainActor
+    static func error(_ message: String, copyable: Bool = true, in window: NSWindow?) {
+        show(message, style: .error, copyable: copyable, duration: 4.0, in: window)
+    }
+
+    /// 显示警告提示
+    @MainActor
+    static func warning(_ message: String, in window: NSWindow?) {
+        show(message, style: .warning, duration: 3.0, in: window)
+    }
+
+    /// 显示信息提示
+    @MainActor
+    static func info(_ message: String, in window: NSWindow?) {
+        show(message, style: .info, in: window)
+    }
+}

@@ -8,7 +8,7 @@
 //  使用 MobileDevice.framework 获取 iOS 设备详细信息
 //
 //  【重要】MobileDevice.framework 是增强层，不是核心依赖：
-//  - 可用时提供：设备名称、型号、系统版本、信任状态、占用状态
+//  - 可用时提供：设备名称、型号、系统版本、信任状态、锁屏状态
 //  - 不可用时：返回降级结果，不影响主捕获流程
 //  - 绝不能因为 MobileDevice 失败而阻止 CMIO+AVFoundation 工作
 //
@@ -16,6 +16,29 @@
 import AppKit
 import AVFoundation
 import Foundation
+
+// MARK: - MobileDevice.framework 函数类型定义
+
+private typealias AMDeviceNotificationSubscribeFunc = @convention(c) (
+    @escaping @convention(c) (UnsafeMutableRawPointer?) -> Void,
+    Int32,
+    Int32,
+    UnsafeMutableRawPointer?,
+    UnsafeMutablePointer<UnsafeMutableRawPointer?>?
+) -> Int32
+
+private typealias AMDeviceConnectFunc = @convention(c) (UnsafeMutableRawPointer?) -> Int32
+private typealias AMDeviceDisconnectFunc = @convention(c) (UnsafeMutableRawPointer?) -> Int32
+private typealias AMDeviceStartSessionFunc = @convention(c) (UnsafeMutableRawPointer?) -> Int32
+private typealias AMDeviceStopSessionFunc = @convention(c) (UnsafeMutableRawPointer?) -> Int32
+private typealias AMDeviceIsPairedFunc = @convention(c) (UnsafeMutableRawPointer?) -> Int32
+private typealias AMDeviceCopyValueFunc = @convention(c) (
+    UnsafeMutableRawPointer?,
+    CFString?,
+    CFString?
+) -> CFTypeRef?
+private typealias AMDeviceGetConnectionIDFunc = @convention(c) (UnsafeMutableRawPointer?) -> UInt32
+private typealias AMDeviceCopyDeviceIdentifierFunc = @convention(c) (UnsafeMutableRawPointer?) -> CFString?
 
 // MARK: - 设备信息结构
 
@@ -46,7 +69,7 @@ struct IOSDeviceInsight {
     /// 占用状态描述
     let occupiedBy: String?
 
-    /// 是否处于锁屏/息屏状态（通过 AVCaptureDevice.isSuspended 检测）
+    /// 是否处于锁屏/息屏状态
     let isLocked: Bool
 
     /// 连接类型（USB/WiFi）
@@ -103,6 +126,22 @@ final class DeviceInsightService {
 
     private var mobileDeviceHandle: UnsafeMutableRawPointer?
 
+    // MobileDevice.framework 函数指针
+    private var amDeviceConnect: AMDeviceConnectFunc?
+    private var amDeviceDisconnect: AMDeviceDisconnectFunc?
+    private var amDeviceStartSession: AMDeviceStartSessionFunc?
+    private var amDeviceStopSession: AMDeviceStopSessionFunc?
+    private var amDeviceIsPaired: AMDeviceIsPairedFunc?
+    private var amDeviceCopyValue: AMDeviceCopyValueFunc?
+    private var amDeviceGetConnectionID: AMDeviceGetConnectionIDFunc?
+    private var amDeviceCopyDeviceIdentifier: AMDeviceCopyDeviceIdentifierFunc?
+
+    /// 已发现的设备 (connectionID -> device pointer)
+    private var discoveredDevices: [UInt32: UnsafeMutableRawPointer] = [:]
+
+    /// 设备 UDID 到 connectionID 的映射
+    private var udidToConnectionID: [String: UInt32] = [:]
+
     // MARK: - 初始化
 
     private init() {
@@ -124,8 +163,50 @@ final class DeviceInsightService {
         }
 
         mobileDeviceHandle = handle
+
+        // 加载函数指针
+        amDeviceConnect = unsafeBitCast(
+            dlsym(handle, "AMDeviceConnect"),
+            to: AMDeviceConnectFunc?.self
+        )
+        amDeviceDisconnect = unsafeBitCast(
+            dlsym(handle, "AMDeviceDisconnect"),
+            to: AMDeviceDisconnectFunc?.self
+        )
+        amDeviceStartSession = unsafeBitCast(
+            dlsym(handle, "AMDeviceStartSession"),
+            to: AMDeviceStartSessionFunc?.self
+        )
+        amDeviceStopSession = unsafeBitCast(
+            dlsym(handle, "AMDeviceStopSession"),
+            to: AMDeviceStopSessionFunc?.self
+        )
+        amDeviceIsPaired = unsafeBitCast(
+            dlsym(handle, "AMDeviceIsPaired"),
+            to: AMDeviceIsPairedFunc?.self
+        )
+        amDeviceCopyValue = unsafeBitCast(
+            dlsym(handle, "AMDeviceCopyValue"),
+            to: AMDeviceCopyValueFunc?.self
+        )
+        amDeviceGetConnectionID = unsafeBitCast(
+            dlsym(handle, "AMDeviceGetConnectionID"),
+            to: AMDeviceGetConnectionIDFunc?.self
+        )
+        amDeviceCopyDeviceIdentifier = unsafeBitCast(
+            dlsym(handle, "AMDeviceCopyDeviceIdentifier"),
+            to: AMDeviceCopyDeviceIdentifierFunc?.self
+        )
+
+        // 检查关键函数是否加载成功
+        guard amDeviceCopyValue != nil else {
+            AppLogger.device.warning("MobileDevice.framework 关键函数加载失败")
+            isMobileDeviceAvailable = false
+            return
+        }
+
         isMobileDeviceAvailable = true
-        AppLogger.device.info("MobileDevice.framework 已加载")
+        AppLogger.device.info("MobileDevice.framework 已加载，函数指针已初始化")
     }
 
     // MARK: - 公开方法
@@ -134,15 +215,27 @@ final class DeviceInsightService {
     /// - Parameters:
     ///   - captureDevice: AVCaptureDevice 实例，用于检测设备状态
     /// - Returns: 设备详细信息（整合 AVFoundation 状态和 MobileDevice 增强信息）
+    ///
+    /// 注意：锁屏状态无法在捕获前可靠检测。锁屏检测依赖 AVCaptureSession 的中断通知，
+    /// 只有在捕获过程中设备锁屏才会触发。
     func getDeviceInsight(for captureDevice: AVCaptureDevice) -> IOSDeviceInsight {
         let udid = captureDevice.uniqueID
         let deviceName = captureDevice.localizedName
         let modelID = captureDevice.modelID
 
-        // 1. 检测 AVFoundation 层面的状态
-        let isLocked = captureDevice.isSuspended
+        // 检测 AVFoundation 层面的占用状态
         let isOccupiedByOther = captureDevice.isInUseByAnotherApplication
         let occupiedBy = isOccupiedByOther ? detectOccupyingApp() : nil
+
+        // 锁屏状态：在捕获前无法可靠检测，设为 false
+        // 实际锁屏检测依赖 AVCaptureSession 的 InterruptionReason
+        let isLocked = false
+
+        // 调试日志
+        AppLogger.device.debug("""
+            设备状态检测: \(deviceName)
+            - isInUseByAnotherApplication (占用): \(isOccupiedByOther)
+        """)
 
         // 2. 尝试从 MobileDevice 获取增强信息
         if isMobileDeviceAvailable {
@@ -192,12 +285,10 @@ final class DeviceInsightService {
     /// 检查设备是否已信任
     /// - Parameter udid: 设备 UDID
     /// - Returns: 信任状态（不确定时返回 true 以不阻塞流程）
-    func isDeviceTrusted(udid: String) -> Bool {
-        guard isMobileDeviceAvailable else { return true }
-
-        // 简化实现：假设已信任
-        // 实际实现需要调用 MobileDevice API
-        return true
+    func isDeviceTrusted(udid _: String) -> Bool {
+        // 信任状态在捕获时会体现为错误，无法提前可靠检测
+        // 返回 true 以不阻塞流程
+        true
     }
 
     /// 检查设备是否被占用

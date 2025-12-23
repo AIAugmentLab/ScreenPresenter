@@ -31,13 +31,23 @@ final class PreferencesWindowController: NSWindowController {
     convenience init() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 480),
-            styleMask: [.titled, .closable],
+            styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window.title = L10n.window.preferences
         window.titlebarSeparatorStyle = .none
+        window.titlebarAppearsTransparent = true
         window.center()
+        // 禁用初始焦点，避免显示 tab 焦点环
+        window.initialFirstResponder = nil
+        window.autorecalculatesKeyViewLoop = false
+
+        // 添加空 toolbar 以匹配主窗口风格（影响 titlebar 和圆角）
+        let toolbar = NSToolbar(identifier: "PreferencesToolbar")
+        toolbar.displayMode = .iconOnly
+        toolbar.showsBaselineSeparator = false
+        window.toolbar = toolbar
 
         self.init(window: window)
 
@@ -47,8 +57,16 @@ final class PreferencesWindowController: NSWindowController {
     override func showWindow(_ sender: Any?) {
         super.showWindow(sender)
         window?.center()
+        // 清除焦点，避免显示焦点环
+        window?.makeFirstResponder(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
+}
+
+// MARK: - Flipped View（坐标系从上向下）
+
+private class FlippedView: NSView {
+    override var isFlipped: Bool { true }
 }
 
 // MARK: - 偏好设置视图控制器
@@ -56,7 +74,10 @@ final class PreferencesWindowController: NSWindowController {
 final class PreferencesViewController: NSViewController {
     // MARK: - UI 组件
 
-    private var tabView: NSTabView!
+    private var segmentedControl: NSSegmentedControl!
+    private var contentContainer: NSView!
+    private var tabViews: [NSView] = []
+    private var currentTabIndex: Int = 0
 
     // MARK: - 生命周期
 
@@ -72,35 +93,66 @@ final class PreferencesViewController: NSViewController {
     // MARK: - UI 设置
 
     private func setupUI() {
-        tabView = NSTabView()
-        view.addSubview(tabView)
-        tabView.snp.makeConstraints { make in
-            make.edges.equalToSuperview().inset(8)
+        // 创建分段控件
+        segmentedControl = NSSegmentedControl(
+            labels: [
+                L10n.prefs.tab.general,
+                L10n.prefs.tab.capture,
+                L10n.prefs.tab.scrcpy,
+                L10n.prefs.tab.permissions,
+            ],
+            trackingMode: .selectOne,
+            target: self,
+            action: #selector(tabChanged(_:))
+        )
+        segmentedControl.selectedSegment = 0
+        segmentedControl.segmentStyle = .automatic
+        segmentedControl.focusRingType = .none
+        view.addSubview(segmentedControl)
+        segmentedControl.snp.makeConstraints { make in
+            // 顶部留出 titlebar + toolbar 区域（约 52pt）
+            make.top.equalToSuperview().offset(52)
+            make.centerX.equalToSuperview()
         }
 
-        // 通用设置标签页
-        let generalTab = NSTabViewItem(identifier: "general")
-        generalTab.label = L10n.prefs.tab.general
-        generalTab.view = createGeneralView()
-        tabView.addTabViewItem(generalTab)
+        // 创建内容容器
+        contentContainer = NSView()
+        view.addSubview(contentContainer)
+        contentContainer.snp.makeConstraints { make in
+            make.top.equalTo(segmentedControl.snp.bottom).offset(16)
+            make.leading.trailing.bottom.equalToSuperview()
+        }
 
-        // 捕获设置标签页
-        let captureTab = NSTabViewItem(identifier: "capture")
-        captureTab.label = L10n.prefs.tab.capture
-        captureTab.view = createCaptureView()
-        tabView.addTabViewItem(captureTab)
+        // 创建各个 tab 的视图
+        tabViews = [
+            createGeneralView(),
+            createCaptureView(),
+            createScrcpyView(),
+            createPermissionsView(),
+        ]
 
-        // Scrcpy 设置标签页
-        let scrcpyTab = NSTabViewItem(identifier: "scrcpy")
-        scrcpyTab.label = L10n.prefs.tab.scrcpy
-        scrcpyTab.view = createScrcpyView()
-        tabView.addTabViewItem(scrcpyTab)
+        // 显示第一个 tab
+        showTab(at: 0)
+    }
 
-        // 权限标签页
-        let permissionsTab = NSTabViewItem(identifier: "permissions")
-        permissionsTab.label = L10n.prefs.tab.permissions
-        permissionsTab.view = createPermissionsView()
-        tabView.addTabViewItem(permissionsTab)
+    @objc private func tabChanged(_ sender: NSSegmentedControl) {
+        showTab(at: sender.selectedSegment)
+    }
+
+    private func showTab(at index: Int) {
+        guard index >= 0, index < tabViews.count else { return }
+
+        // 移除当前显示的视图
+        contentContainer.subviews.forEach { $0.removeFromSuperview() }
+
+        // 添加新视图
+        let newView = tabViews[index]
+        contentContainer.addSubview(newView)
+        newView.snp.makeConstraints { make in
+            make.edges.equalToSuperview()
+        }
+
+        currentTabIndex = index
     }
 
     // MARK: - 通用设置
@@ -126,7 +178,7 @@ final class PreferencesViewController: NSViewController {
         languageNote.font = NSFont.systemFont(ofSize: 11)
         languageNote.textColor = .secondaryLabelColor
         languageGroup.addArrangedSubview(languageNote)
-        stackView.addArrangedSubview(languageGroup)
+        addSettingsGroup(languageGroup, to: stackView)
 
         // 外观设置组
         let appearanceGroup = createSettingsGroup(title: L10n.prefs.section.appearance, icon: "paintbrush")
@@ -143,8 +195,9 @@ final class PreferencesViewController: NSViewController {
                 action: #selector(backgroundOpacityChanged(_:))
             )
             slider.snp.makeConstraints { make in
-                make.width.equalTo(150)
+                make.width.equalTo(150).priority(.high)
             }
+            slider.setContentHuggingPriority(.defaultHigh, for: .horizontal)
             stack.addArrangedSubview(slider)
 
             let valueLabel = NSTextField(labelWithString: String(
@@ -157,7 +210,7 @@ final class PreferencesViewController: NSViewController {
 
             return stack
         })
-        stackView.addArrangedSubview(appearanceGroup)
+        addSettingsGroup(appearanceGroup, to: stackView)
 
         // 布局设置组
         let layoutGroup = createSettingsGroup(title: L10n.prefs.section.layout, icon: "rectangle.split.2x1")
@@ -174,7 +227,7 @@ final class PreferencesViewController: NSViewController {
             segmented.selectedSegment = UserPreferences.shared.iosOnLeft ? 0 : 1
             return segmented
         })
-        stackView.addArrangedSubview(layoutGroup)
+        addSettingsGroup(layoutGroup, to: stackView)
 
         // 连接设置组
         let connectionGroup = createSettingsGroup(title: L10n.prefs.section.connection, icon: "cable.connector")
@@ -213,12 +266,8 @@ final class PreferencesViewController: NSViewController {
             stack.addArrangedSubview(label)
             return stack
         })
-        stackView.addArrangedSubview(connectionGroup)
+        addSettingsGroup(connectionGroup, to: stackView)
 
-        // 底部空间
-        stackView.addArrangedSubview(NSView())
-
-        scrollView.documentView = stackView
         setupScrollViewConstraints(scrollView: scrollView, contentView: stackView)
         return scrollView
     }
@@ -249,11 +298,8 @@ final class PreferencesViewController: NSViewController {
         note.font = NSFont.systemFont(ofSize: 11)
         note.textColor = .secondaryLabelColor
         frameRateGroup.addArrangedSubview(note)
-        stackView.addArrangedSubview(frameRateGroup)
+        addSettingsGroup(frameRateGroup, to: stackView)
 
-        stackView.addArrangedSubview(NSView())
-
-        scrollView.documentView = stackView
         setupScrollViewConstraints(scrollView: scrollView, contentView: stackView)
         return scrollView
     }
@@ -302,7 +348,7 @@ final class PreferencesViewController: NSViewController {
         videoNote.font = NSFont.systemFont(ofSize: 11)
         videoNote.textColor = .secondaryLabelColor
         videoGroup.addArrangedSubview(videoNote)
-        stackView.addArrangedSubview(videoGroup)
+        addSettingsGroup(videoGroup, to: stackView)
 
         // 显示设置组
         let displayGroup = createSettingsGroup(title: L10n.prefs.section.display, icon: "hand.tap")
@@ -313,7 +359,7 @@ final class PreferencesViewController: NSViewController {
         )
         showTouchesCheckbox.state = UserPreferences.shared.scrcpyShowTouches ? .on : .off
         displayGroup.addArrangedSubview(showTouchesCheckbox)
-        stackView.addArrangedSubview(displayGroup)
+        addSettingsGroup(displayGroup, to: stackView)
 
         // 高级设置组
         let advancedGroup = createSettingsGroup(title: L10n.prefs.section.advanced, icon: "gearshape.2")
@@ -328,11 +374,8 @@ final class PreferencesViewController: NSViewController {
         )
         linkButton.bezelStyle = .inline
         advancedGroup.addArrangedSubview(linkButton)
-        stackView.addArrangedSubview(advancedGroup)
+        addSettingsGroup(advancedGroup, to: stackView)
 
-        stackView.addArrangedSubview(NSView())
-
-        scrollView.documentView = stackView
         setupScrollViewConstraints(scrollView: scrollView, contentView: stackView)
         return scrollView
     }
@@ -358,7 +401,7 @@ final class PreferencesViewController: NSViewController {
             description: L10n.permission.cameraDesc,
             permissionType: .camera
         ))
-        stackView.addArrangedSubview(systemPermGroup)
+        addSettingsGroup(systemPermGroup, to: stackView)
 
         // Android 工具链组
         let toolchainGroup = createSettingsGroup(title: L10n.prefs.section.androidToolchain, icon: "apps.iphone")
@@ -370,7 +413,7 @@ final class PreferencesViewController: NSViewController {
             name: "scrcpy",
             description: L10n.prefs.toolchain.scrcpyDesc
         ))
-        stackView.addArrangedSubview(toolchainGroup)
+        addSettingsGroup(toolchainGroup, to: stackView)
 
         // 刷新按钮
         let refreshButton = NSButton(
@@ -387,9 +430,6 @@ final class PreferencesViewController: NSViewController {
         buttonContainer.addArrangedSubview(refreshButton)
         stackView.addArrangedSubview(buttonContainer)
 
-        stackView.addArrangedSubview(NSView())
-
-        scrollView.documentView = stackView
         setupScrollViewConstraints(scrollView: scrollView, contentView: stackView)
         return scrollView
     }
@@ -401,6 +441,8 @@ final class PreferencesViewController: NSViewController {
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = false
+        // 使用 flipped 的 documentView，让内容从顶部开始排列
+        scrollView.documentView = FlippedView()
         return scrollView
     }
 
@@ -415,17 +457,38 @@ final class PreferencesViewController: NSViewController {
 
     private func setupScrollViewConstraints(scrollView: NSScrollView, contentView: NSStackView) {
         guard let documentView = scrollView.documentView else { return }
-        documentView.snp.makeConstraints { make in
-            make.leading.trailing.top.equalTo(scrollView.contentView)
-            make.width.equalTo(scrollView.contentView)
-        }
+
+        // 关闭 autoresizing mask 转换
+        documentView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+
+        // 将 stackView 添加到 documentView（FlippedView）中
+        documentView.addSubview(contentView)
+
+        // 设置 contentView 约束
+        NSLayoutConstraint.activate([
+            contentView.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
+            contentView.topAnchor.constraint(equalTo: documentView.topAnchor),
+            contentView.bottomAnchor.constraint(equalTo: documentView.bottomAnchor),
+        ])
+
+        // 设置 documentView 约束（宽度等于 scrollView）
+        NSLayoutConstraint.activate([
+            documentView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
+            documentView.trailingAnchor.constraint(equalTo: scrollView.contentView.trailingAnchor),
+            documentView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
+            documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
+        ])
     }
 
+    /// 创建设置分组，返回内容容器（contentBox）
+    /// 注意：groupStack 会通过 contentBox.superview 访问
     private func createSettingsGroup(title: String, icon: String) -> NSStackView {
         let groupStack = NSStackView()
         groupStack.orientation = .vertical
         groupStack.alignment = .leading
-        groupStack.spacing = 12
+        groupStack.spacing = 8
 
         // 标题行
         let titleStack = NSStackView()
@@ -434,9 +497,10 @@ final class PreferencesViewController: NSViewController {
         let iconView = NSImageView()
         iconView.image = NSImage(systemSymbolName: icon, accessibilityDescription: nil)
         iconView.contentTintColor = .labelColor
-        iconView.snp.makeConstraints { make in
-            make.size.equalTo(16)
-        }
+        // 使用 frame 设置固定大小，避免约束冲突
+        iconView.setFrameSize(NSSize(width: 16, height: 16))
+        iconView.setContentHuggingPriority(.required, for: .horizontal)
+        iconView.setContentHuggingPriority(.required, for: .vertical)
         titleStack.addArrangedSubview(iconView)
         let titleLabel = NSTextField(labelWithString: title)
         titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
@@ -449,15 +513,32 @@ final class PreferencesViewController: NSViewController {
         contentBox.alignment = .leading
         contentBox.spacing = 10
         contentBox.wantsLayer = true
-        contentBox.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        // 使用半透明的颜色来区分卡片和背景
+        contentBox.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.05).cgColor
         contentBox.layer?.cornerRadius = 8
         contentBox.edgeInsets = NSEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
-        contentBox.snp.makeConstraints { make in
-            make.width.equalTo(440).priority(.high)
-        }
         groupStack.addArrangedSubview(contentBox)
 
+        // 让 contentBox 宽度等于 groupStack 宽度（使用 NSLayoutConstraint 避免冲突）
+        contentBox.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            contentBox.leadingAnchor.constraint(equalTo: groupStack.leadingAnchor),
+            contentBox.trailingAnchor.constraint(equalTo: groupStack.trailingAnchor),
+        ])
+
         return contentBox
+    }
+
+    /// 将设置分组添加到父 stackView，并设置宽度约束
+    private func addSettingsGroup(_ contentBox: NSStackView, to parentStack: NSStackView) {
+        guard let groupStack = contentBox.superview as? NSStackView else { return }
+        parentStack.addArrangedSubview(groupStack)
+        // 让 groupStack 宽度填满父视图（使用 NSLayoutConstraint 避免冲突）
+        groupStack.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            groupStack.leadingAnchor.constraint(equalTo: parentStack.leadingAnchor, constant: 16),
+            groupStack.trailingAnchor.constraint(equalTo: parentStack.trailingAnchor, constant: -16),
+        ])
     }
 
     private func createLabeledRow(label: String, controlBuilder: () -> NSView) -> NSStackView {
@@ -466,16 +547,21 @@ final class PreferencesViewController: NSViewController {
         rowStack.alignment = .centerY
         rowStack.spacing = 12
 
+        // Title 区域（左边）
         let labelView = NSTextField(labelWithString: label)
         labelView.font = NSFont.systemFont(ofSize: 13)
-        labelView.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        labelView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        labelView.snp.makeConstraints { make in
-            make.width.equalTo(100).priority(.high)
-        }
+        labelView.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        labelView.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
         rowStack.addArrangedSubview(labelView)
 
+        // 弹性空间（推动 value 到右边）
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        rowStack.addArrangedSubview(spacer)
+
+        // Value 区域（右边）
         let control = controlBuilder()
+        control.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         rowStack.addArrangedSubview(control)
 
         return rowStack
@@ -576,7 +662,7 @@ final class PreferencesViewController: NSViewController {
     private func createPermissionRow(name: String, description: String, permissionType: PermissionType) -> NSStackView {
         let rowStack = NSStackView()
         rowStack.orientation = .horizontal
-        rowStack.alignment = .centerY
+        rowStack.alignment = .top
         rowStack.spacing = 8
 
         // 状态图标
@@ -586,6 +672,8 @@ final class PreferencesViewController: NSViewController {
         statusIcon.snp.makeConstraints { make in
             make.size.equalTo(18)
         }
+        statusIcon.setContentHuggingPriority(.required, for: .horizontal)
+        statusIcon.setContentCompressionResistancePriority(.required, for: .horizontal)
         rowStack.addArrangedSubview(statusIcon)
 
         // 名称和描述
@@ -595,24 +683,38 @@ final class PreferencesViewController: NSViewController {
         infoStack.spacing = 2
         let nameLabel = NSTextField(labelWithString: name)
         nameLabel.font = NSFont.systemFont(ofSize: 13)
+        nameLabel.lineBreakMode = .byWordWrapping
+        nameLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         infoStack.addArrangedSubview(nameLabel)
-        let descLabel = NSTextField(labelWithString: description)
+        let descLabel = NSTextField(wrappingLabelWithString: description)
         descLabel.font = NSFont.systemFont(ofSize: 11)
         descLabel.textColor = .secondaryLabelColor
+        descLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         infoStack.addArrangedSubview(descLabel)
+        infoStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        infoStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         rowStack.addArrangedSubview(infoStack)
 
-        // 占位
+        // 弹性空间（推动右侧内容到右边）
         let spacer = NSView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         rowStack.addArrangedSubview(spacer)
+
+        // 右侧容器（状态 + 按钮）
+        let rightStack = NSStackView()
+        rightStack.orientation = .horizontal
+        rightStack.alignment = .centerY
+        rightStack.spacing = 8
+        rightStack.setContentHuggingPriority(.required, for: .horizontal)
+        rightStack.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         // 状态文本
         let statusLabel = NSTextField(labelWithString: L10n.common.checking)
         statusLabel.font = NSFont.systemFont(ofSize: 11)
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.alignment = .right
-        rowStack.addArrangedSubview(statusLabel)
+        statusLabel.setContentHuggingPriority(.required, for: .horizontal)
+        rightStack.addArrangedSubview(statusLabel)
 
         // 打开设置按钮
         let openButton = NSButton(
@@ -622,13 +724,15 @@ final class PreferencesViewController: NSViewController {
         )
         openButton.bezelStyle = .rounded
         openButton.controlSize = .small
+        openButton.setContentHuggingPriority(.required, for: .horizontal)
         switch permissionType {
         case .screenRecording:
             openButton.tag = 0
         case .camera:
             openButton.tag = 1
         }
-        rowStack.addArrangedSubview(openButton)
+        rightStack.addArrangedSubview(openButton)
+        rowStack.addArrangedSubview(rightStack)
 
         // 检查权限状态
         Task { @MainActor in

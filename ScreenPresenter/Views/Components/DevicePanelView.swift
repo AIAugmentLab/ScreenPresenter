@@ -91,13 +91,14 @@ final class DevicePanelView: NSView {
     // MARK: - 状态
 
     private enum PanelState {
+        case loading
         case disconnected
         case connected
         case capturing
         case toolchainMissing
     }
 
-    private var currentState: PanelState = .disconnected
+    private var currentState: PanelState = .loading
     private var currentPlatform: DevicePlatform = .ios
 
     // MARK: - 鼠标追踪
@@ -266,7 +267,7 @@ final class DevicePanelView: NSView {
 
         // 标题（设备名称或提示文案）
         titleLabel = NSTextField(labelWithString: "")
-        titleLabel.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
+        titleLabel.font = NSFont.systemFont(ofSize: 28, weight: .semibold)
         titleLabel.textColor = Colors.title
         titleLabel.alignment = .center
         titleLabel.lineBreakMode = .byTruncatingTail
@@ -282,58 +283,60 @@ final class DevicePanelView: NSView {
         // 状态栏
         statusStackView = NSStackView()
         statusStackView.orientation = .horizontal
-        statusStackView.spacing = 6
+        statusStackView.spacing = 8
         statusStackView.alignment = .centerY
         contentContainer.addSubview(statusStackView)
         statusStackView.snp.makeConstraints { make in
-            make.top.equalTo(titleLabel.snp.bottom).offset(8)
+            make.top.equalTo(titleLabel.snp.bottom).offset(12)
             make.centerX.equalToSuperview()
         }
 
         // 状态指示灯
         statusIndicator = NSView()
         statusIndicator.wantsLayer = true
-        statusIndicator.layer?.cornerRadius = 3
+        statusIndicator.layer?.cornerRadius = 5
         statusIndicator.layer?.backgroundColor = NSColor.systemGray.cgColor
         statusStackView.addArrangedSubview(statusIndicator)
         statusIndicator.snp.makeConstraints { make in
-            make.size.equalTo(6)
+            make.size.equalTo(10)
         }
 
         // 状态文本
         statusLabel = NSTextField(labelWithString: "")
-        statusLabel.font = NSFont.systemFont(ofSize: 11)
+        statusLabel.font = NSFont.systemFont(ofSize: 18)
         statusLabel.textColor = Colors.status
         statusStackView.addArrangedSubview(statusLabel)
 
         // 操作按钮（使用自定义视图实现内边距）
         actionButton = PaddedButton(
-            horizontalPadding: 12,
-            verticalPadding: 6
+            horizontalPadding: 20,
+            verticalPadding: 12
         )
         actionButton.target = self
         actionButton.action = #selector(actionTapped)
         actionButton.wantsLayer = true
         actionButton.isBordered = false
-        actionButton.layer?.cornerRadius = 6
+        actionButton.layer?.cornerRadius = 8
         actionButton.layer?.backgroundColor = NSColor.appAccent.cgColor
+        actionButton.focusRingType = .none
+        actionButton.refusesFirstResponder = true
         setActionButtonTitle(L10n.overlayUI.startCapture)
         contentContainer.addSubview(actionButton)
         actionButton.snp.makeConstraints { make in
-            make.top.equalTo(statusStackView.snp.bottom).offset(14)
+            make.top.equalTo(statusStackView.snp.bottom).offset(24)
             make.centerX.equalToSuperview()
         }
 
         // 副标题/提示
         subtitleLabel = NSTextField(labelWithString: "")
-        subtitleLabel.font = NSFont.systemFont(ofSize: 10)
+        subtitleLabel.font = NSFont.systemFont(ofSize: 16)
         subtitleLabel.textColor = Colors.hint
         subtitleLabel.alignment = .center
         subtitleLabel.lineBreakMode = .byWordWrapping
         subtitleLabel.maximumNumberOfLines = 2
         contentContainer.addSubview(subtitleLabel)
         subtitleLabel.snp.makeConstraints { make in
-            make.top.equalTo(actionButton.snp.bottom).offset(8)
+            make.top.equalTo(actionButton.snp.bottom).offset(16)
             make.centerX.equalToSuperview()
             make.leading.greaterThanOrEqualToSuperview()
             make.trailing.lessThanOrEqualToSuperview()
@@ -346,7 +349,7 @@ final class DevicePanelView: NSView {
         captureBarView = NSView()
         captureBarView.wantsLayer = true
         captureBarView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.7).cgColor
-        captureBarView.layer?.cornerRadius = 6
+        captureBarView.layer?.cornerRadius = 8
         captureBarView.isHidden = true
         addSubview(captureBarView)
         // 约束会在 layout() 中根据 screenFrame 动态更新
@@ -354,13 +357,13 @@ final class DevicePanelView: NSView {
         // 状态指示灯
         captureIndicator = NSView()
         captureIndicator.wantsLayer = true
-        captureIndicator.layer?.cornerRadius = 3
+        captureIndicator.layer?.cornerRadius = 4
         captureIndicator.layer?.backgroundColor = NSColor.systemGreen.cgColor
         captureBarView.addSubview(captureIndicator)
         captureIndicator.snp.makeConstraints { make in
             make.leading.equalToSuperview().offset(10)
             make.centerY.equalToSuperview()
-            make.size.equalTo(6)
+            make.size.equalTo(8)
         }
 
         // 捕获状态文本
@@ -369,7 +372,7 @@ final class DevicePanelView: NSView {
         captureStatusLabel.textColor = .white
         captureBarView.addSubview(captureStatusLabel)
         captureStatusLabel.snp.makeConstraints { make in
-            make.leading.equalTo(captureIndicator.snp.trailing).offset(5)
+            make.leading.equalTo(captureIndicator.snp.trailing).offset(6)
             make.centerY.equalToSuperview()
         }
 
@@ -522,6 +525,29 @@ final class DevicePanelView: NSView {
         addPulseAnimation(to: captureIndicator)
     }
 
+    /// 显示加载状态
+    func showLoading(platform: DevicePlatform) {
+        currentState = .loading
+        currentPlatform = platform
+
+        // 配置边框外观
+        configureBezel(for: platform, deviceName: nil)
+
+        // 隐藏渲染视图，显示状态容器
+        renderView.isHidden = true
+        statusContainerView.isHidden = false
+        captureBarView.isHidden = true
+
+        // 显示加载提示
+        titleLabel.stringValue = L10n.common.loading
+        titleLabel.textColor = Colors.titleSecondary
+
+        // 隐藏状态栏和按钮
+        statusStackView.isHidden = true
+        actionButton.isHidden = true
+        subtitleLabel.isHidden = true
+    }
+
     /// 显示工具链缺失状态
     func showToolchainMissing(toolName: String, onInstall: @escaping () -> Void) {
         currentState = .toolchainMissing
@@ -553,6 +579,44 @@ final class DevicePanelView: NSView {
         subtitleLabel.stringValue = L10n.toolchain.installScrcpyHint
         subtitleLabel.textColor = Colors.hint
         subtitleLabel.isHidden = false
+    }
+
+    // MARK: - 会话中断状态
+
+    /// 显示会话中断提示（设备锁屏等）
+    func showSessionInterrupted(reason: String) {
+        // 在捕获栏上显示中断提示
+        captureStatusLabel.stringValue = "⚠️ \(reason)"
+        captureStatusLabel.textColor = .systemOrange
+
+        // 显示捕获栏
+        captureBarView.isHidden = false
+        captureBarView.alphaValue = 1.0
+
+        // 停止脉冲动画
+        captureIndicator.layer?.removeAllAnimations()
+        captureIndicator.layer?.backgroundColor = NSColor.systemOrange.cgColor
+
+        AppLogger.capture.warning("会话中断显示: \(reason)")
+    }
+
+    /// 隐藏会话中断提示
+    func hideSessionInterrupted() {
+        // 恢复正常状态
+        captureStatusLabel.stringValue = L10n.device.capturing
+        captureStatusLabel.textColor = .white
+
+        // 恢复捕获指示器
+        captureIndicator.layer?.backgroundColor = NSColor.systemGreen.cgColor
+        addPulseAnimation(to: captureIndicator)
+
+        // 恢复捕获栏的悬停行为
+        if !isMouseInside {
+            captureBarView.isHidden = true
+            captureBarView.alphaValue = 0.0
+        }
+
+        AppLogger.capture.info("会话中断恢复")
     }
 
     /// 更新帧率
@@ -589,6 +653,11 @@ final class DevicePanelView: NSView {
         bezelView.screenCornerRadius
     }
 
+    /// 获取顶部特征（刘海/灵动岛/摄像头开孔）的底部距离
+    var topFeatureBottomInset: CGFloat {
+        bezelView.topFeatureBottomInset
+    }
+
     // MARK: - 私有方法
 
     private var currentDeviceName: String?
@@ -604,7 +673,7 @@ final class DevicePanelView: NSView {
 
     /// 设置按钮白色文本标题
     private func setActionButtonTitle(_ title: String) {
-        let buttonFont = NSFont.systemFont(ofSize: 11, weight: .medium)
+        let buttonFont = NSFont.systemFont(ofSize: 16, weight: .medium)
         let attributes: [NSAttributedString.Key: Any] = [
             .foregroundColor: NSColor.white,
             .font: buttonFont,
@@ -643,18 +712,27 @@ final class DevicePanelView: NSView {
         updateCaptureBarPosition()
     }
 
-    /// 更新捕获栏位置（跟随屏幕区域）
+    /// 更新捕获栏位置（跟随屏幕区域，考虑刘海/灵动岛/摄像头开孔）
     private func updateCaptureBarPosition() {
         let screen = screenFrame
         guard screen.width > 0, screen.height > 0 else { return }
 
         let barHeight: CGFloat = 28
-        let barInset: CGFloat = 4
+        let horizontalInset: CGFloat = 20
+
+        // 计算顶部偏移：存在顶部特征， y 从顶部底部开始
+        // 如果没有顶部特征（topFeatureBottomInset < 1），则从屏幕顶部下移 12pt
+        let topOffset: CGFloat
+        if topFeatureBottomInset < 1 {
+            topOffset = 12
+        } else {
+            topOffset = topFeatureBottomInset
+        }
 
         captureBarView.frame = CGRect(
-            x: screen.minX + barInset,
-            y: screen.maxY - barHeight - barInset,
-            width: screen.width - barInset * 2,
+            x: screen.minX + horizontalInset,
+            y: screen.maxY - barHeight - topOffset,
+            width: screen.width - horizontalInset * 2,
             height: barHeight
         )
     }

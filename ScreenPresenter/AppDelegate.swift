@@ -19,6 +19,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindow: NSWindow?
     private var mainViewController: MainViewController?
 
+    // MARK: - 工具栏
+
+    private var windowToolbar: NSToolbar?
+    private var refreshToolbarItem: NSToolbarItem?
+    private var isRefreshing: Bool = false
+
     // MARK: - 应用生命周期
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -201,17 +207,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 创建窗口
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
 
-        window.title = "ScreenPresenter"
+        window.title = L10n.window.main
         window.titlebarSeparatorStyle = .none
+        window.titlebarAppearsTransparent = true
         window.minSize = NSSize(width: 800, height: 600)
         window.contentViewController = mainViewController
         window.center()
         window.setFrameAutosaveName("MainWindow")
+
+        // 设置窗口工具栏
+        setupWindowToolbar(for: window)
 
         // 设置窗口代理
         window.delegate = self
@@ -224,6 +234,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
 
         AppLogger.app.info("主窗口已创建")
+    }
+
+    private func setupWindowToolbar(for window: NSWindow) {
+        let toolbar = NSToolbar(identifier: "MainToolbar")
+        toolbar.delegate = self
+        toolbar.displayMode = .iconOnly
+        toolbar.allowsUserCustomization = false
+        toolbar.showsBaselineSeparator = false
+
+        window.toolbar = toolbar
+        windowToolbar = toolbar
     }
 }
 
@@ -238,6 +259,14 @@ extension AppDelegate: NSWindowDelegate {
         // 通知渲染器更新尺寸
         mainViewController?.handleWindowResize()
     }
+
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        mainViewController?.handleFullScreenChange(isFullScreen: true)
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        mainViewController?.handleFullScreenChange(isFullScreen: false)
+    }
 }
 
 // MARK: - 菜单操作
@@ -248,8 +277,84 @@ extension AppDelegate {
     }
 
     @IBAction func refreshDevices(_ sender: Any?) {
+        guard !isRefreshing else { return }
+
+        startRefreshLoading()
+
         Task {
             await AppState.shared.refreshDevices()
+            await MainActor.run {
+                stopRefreshLoading()
+                showRefreshToast()
+            }
+        }
+    }
+
+    private func startRefreshLoading() {
+        isRefreshing = true
+        refreshToolbarItem?.isEnabled = false
+    }
+
+    private func stopRefreshLoading() {
+        isRefreshing = false
+        refreshToolbarItem?.isEnabled = true
+    }
+
+    @MainActor
+    private func showRefreshToast() {
+        ToastView.success(L10n.toolbar.refreshComplete, in: mainWindow)
+    }
+}
+
+// MARK: - 工具栏代理
+
+extension AppDelegate: NSToolbarDelegate {
+    private enum ToolbarItemIdentifier {
+        static let refresh = NSToolbarItem.Identifier("refresh")
+        static let preferences = NSToolbarItem.Identifier("preferences")
+        static let flexibleSpace = NSToolbarItem.Identifier.flexibleSpace
+    }
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.flexibleSpace, ToolbarItemIdentifier.refresh, ToolbarItemIdentifier.preferences]
+    }
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.flexibleSpace, ToolbarItemIdentifier.refresh, ToolbarItemIdentifier.preferences]
+    }
+
+    func toolbar(
+        _ toolbar: NSToolbar,
+        itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
+        willBeInsertedIntoToolbar flag: Bool
+    ) -> NSToolbarItem? {
+        switch itemIdentifier {
+        case ToolbarItemIdentifier.refresh:
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.label = L10n.toolbar.refresh
+            item.paletteLabel = L10n.toolbar.refresh
+            item.toolTip = L10n.toolbar.refreshTooltip
+            item.image = NSImage(
+                systemSymbolName: "arrow.clockwise",
+                accessibilityDescription: L10n.toolbar.refresh
+            )
+            item.target = self
+            item.action = #selector(refreshDevices(_:))
+            refreshToolbarItem = item
+            return item
+
+        case ToolbarItemIdentifier.preferences:
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.label = L10n.toolbar.preferences
+            item.paletteLabel = L10n.toolbar.preferences
+            item.toolTip = L10n.toolbar.preferencesTooltip
+            item.image = NSImage(systemSymbolName: "gear", accessibilityDescription: L10n.toolbar.preferences)
+            item.target = self
+            item.action = #selector(showPreferences(_:))
+            return item
+
+        default:
+            return nil
         }
     }
 }
