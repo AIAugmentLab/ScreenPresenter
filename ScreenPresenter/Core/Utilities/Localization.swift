@@ -426,6 +426,8 @@ enum L10n {
         static var notDetermined: String { "permission.notDetermined".localized }
         static var screenRecordingName: String { "permission.screenRecording.name".localized }
         static var screenRecordingDesc: String { "permission.screenRecording.desc".localized }
+        static var cameraName: String { "permission.camera.name".localized }
+        static var cameraDesc: String { "permission.camera.desc".localized }
         static var openSystemPrefs: String { "permission.openSystemPrefs".localized }
     }
 
@@ -500,6 +502,7 @@ enum L10n {
         static func cannotGetDevice(_ id: String) -> String { "capture.cannotGetDevice".localized(id) }
         static var cannotAddInput: String { "capture.cannotAddInput".localized }
         static func inputFailed(_ error: String) -> String { "capture.inputFailed".localized(error) }
+        static func deviceNotReady(_ name: String) -> String { "capture.deviceNotReady".localized(name) }
         static var cannotAddOutput: String { "capture.cannotAddOutput".localized }
     }
 

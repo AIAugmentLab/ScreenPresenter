@@ -179,7 +179,7 @@
 "error.processTerminated" = "Process terminated (exit code: %d)";
 "error.timeout" = "Connection timeout";
 "error.noDevice" = "No available %@ device";
-"error.startCaptureFailed" = "Failed to start %@ capture: %@";
+"error.startCaptureFailed" = "Failed to start %@ capture: \n%@";
 
 // MARK: - Toolbar
 "toolbar.refresh" = "Refresh";
@@ -202,6 +202,8 @@
 "permission.notDetermined" = "Not Determined";
 "permission.screenRecording.name" = "Screen Recording";
 "permission.screenRecording.desc" = "For capturing Android device screen (fallback only)";
+"permission.camera.name" = "Camera";
+"permission.camera.desc" = "For capturing iOS device screen via USB";
 "permission.openSystemPrefs" = "Open System Preferences";
 
 // MARK: - Background Color Mode
@@ -270,6 +272,7 @@
 "capture.cannotGetDevice" = "Cannot get capture device: %@";
 "capture.cannotAddInput" = "Cannot add video input";
 "capture.inputFailed" = "Failed to create video input: %@";
+"capture.deviceNotReady" = "Cannot use %@. \n\nPlease ensure: \n1. iPhone screen is unlocked \n2. Tap 'Trust This Computer' on iPhone \n3. Camera permission is granted";
 "capture.cannotAddOutput" = "Cannot add video output";
 
 // MARK: - iOS Screen Mirror

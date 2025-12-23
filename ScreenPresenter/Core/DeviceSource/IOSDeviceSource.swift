@@ -225,7 +225,15 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
             AppLogger.capture.info("视频输入已添加")
         } catch {
             AppLogger.capture.error("创建视频输入失败: \(error.localizedDescription)")
-            throw DeviceSourceError.connectionFailed(L10n.capture.inputFailed(error.localizedDescription))
+
+            // 检测常见错误并提供更有用的提示
+            let errorMessage = error.localizedDescription
+            if errorMessage.contains("无法使用") || errorMessage.contains("Cannot use") {
+                // "无法使用 XXX" 通常是因为 iPhone 未解锁或未信任
+                throw DeviceSourceError.connectionFailed(L10n.capture.deviceNotReady(iosDevice.name))
+            } else {
+                throw DeviceSourceError.connectionFailed(L10n.capture.inputFailed(errorMessage))
+            }
         }
 
         // 添加视频输出

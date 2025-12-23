@@ -12,6 +12,33 @@
 import AppKit
 import SnapKit
 
+// MARK: - 带内边距的按钮
+
+/// 支持内边距的自定义按钮
+final class PaddedButton: NSButton {
+    private let horizontalPadding: CGFloat
+    private let verticalPadding: CGFloat
+
+    init(horizontalPadding: CGFloat = 12, verticalPadding: CGFloat = 6) {
+        self.horizontalPadding = horizontalPadding
+        self.verticalPadding = verticalPadding
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var intrinsicContentSize: NSSize {
+        let baseSize = super.intrinsicContentSize
+        return NSSize(
+            width: baseSize.width + horizontalPadding * 2,
+            height: baseSize.height + verticalPadding * 2
+        )
+    }
+}
+
 // MARK: - 设备面板视图
 
 final class DevicePanelView: NSView {
@@ -28,7 +55,7 @@ final class DevicePanelView: NSView {
     private var statusStackView: NSStackView!
     private var statusIndicator: NSView!
     private var statusLabel: NSTextField!
-    private var actionButton: NSButton!
+    private var actionButton: PaddedButton!
     private var subtitleLabel: NSTextField!
 
     // 捕获中的悬浮栏
@@ -163,29 +190,22 @@ final class DevicePanelView: NSView {
         statusLabel.textColor = Colors.status
         statusStackView.addArrangedSubview(statusLabel)
 
-        // 操作按钮
-        actionButton = NSButton(title: "", target: self, action: #selector(actionTapped))
-        actionButton.bezelStyle = .smallSquare
-        actionButton.controlSize = .regular
+        // 操作按钮（使用自定义视图实现内边距）
+        actionButton = PaddedButton(
+            horizontalPadding: 12,
+            verticalPadding: 6
+        )
+        actionButton.target = self
+        actionButton.action = #selector(actionTapped)
         actionButton.wantsLayer = true
         actionButton.isBordered = false
         actionButton.layer?.cornerRadius = 6
         actionButton.layer?.backgroundColor = NSColor.appAccent.cgColor
-        // 设置白色文本
-        let buttonFont = NSFont.systemFont(ofSize: 11, weight: .medium)
-        let buttonAttributes: [NSAttributedString.Key: Any] = [
-            .foregroundColor: NSColor.white,
-            .font: buttonFont,
-        ]
-        actionButton.attributedTitle = NSAttributedString(
-            string: L10n.overlayUI.startCapture,
-            attributes: buttonAttributes
-        )
+        setActionButtonTitle(L10n.overlayUI.startCapture)
         contentContainer.addSubview(actionButton)
         actionButton.snp.makeConstraints { make in
             make.top.equalTo(statusStackView.snp.bottom).offset(14)
             make.centerX.equalToSuperview()
-            make.height.equalTo(28)
         }
 
         // 副标题/提示

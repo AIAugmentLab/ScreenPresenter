@@ -13,6 +13,7 @@
 //
 
 import AppKit
+import AVFoundation
 import SnapKit
 
 // MARK: - 偏好设置窗口控制器
@@ -346,6 +347,14 @@ final class PreferencesViewController: NSViewController {
             description: L10n.permission.screenRecordingDesc,
             permissionType: .screenRecording
         ))
+        let divider1 = NSBox()
+        divider1.boxType = .separator
+        systemPermGroup.addArrangedSubview(divider1)
+        systemPermGroup.addArrangedSubview(createPermissionRow(
+            name: L10n.permission.cameraName,
+            description: L10n.permission.cameraDesc,
+            permissionType: .camera
+        ))
         stackView.addArrangedSubview(systemPermGroup)
 
         // Android 工具链组
@@ -558,6 +567,7 @@ final class PreferencesViewController: NSViewController {
 
     private enum PermissionType {
         case screenRecording
+        case camera
     }
 
     private func createPermissionRow(name: String, description: String, permissionType: PermissionType) -> NSStackView {
@@ -609,12 +619,23 @@ final class PreferencesViewController: NSViewController {
         )
         openButton.bezelStyle = .rounded
         openButton.controlSize = .small
-        openButton.tag = permissionType == .screenRecording ? 0 : 1
+        switch permissionType {
+        case .screenRecording:
+            openButton.tag = 0
+        case .camera:
+            openButton.tag = 1
+        }
         rowStack.addArrangedSubview(openButton)
 
         // 检查权限状态
         Task { @MainActor in
-            let granted = checkScreenRecordingPermission()
+            let granted: Bool = switch permissionType {
+            case .screenRecording:
+                checkScreenRecordingPermission()
+            case .camera:
+                checkCameraPermission()
+            }
+
             if granted {
                 statusIcon.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
                 statusIcon.contentTintColor = .systemGreen
@@ -636,6 +657,12 @@ final class PreferencesViewController: NSViewController {
         // 通过尝试获取窗口列表来判断是否有权限
         let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]
         return windowList != nil && !windowList!.isEmpty
+    }
+
+    private func checkCameraPermission() -> Bool {
+        // 检查摄像头权限
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        return status == .authorized
     }
 
     // MARK: - 操作
@@ -672,8 +699,18 @@ final class PreferencesViewController: NSViewController {
     }
 
     @objc private func openSystemPreferences(_ sender: NSButton) {
-        // 打开系统偏好设置 - 隐私 - 屏幕录制
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+        let urlString: String
+        switch sender.tag {
+        case 0:
+            // 打开系统偏好设置 - 隐私 - 屏幕录制
+            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+        case 1:
+            // 打开系统偏好设置 - 隐私 - 摄像头
+            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
+        default:
+            return
+        }
+        if let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
         }
     }

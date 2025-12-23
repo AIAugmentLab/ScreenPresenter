@@ -86,7 +86,7 @@ enum DeviceSourceState: Equatable {
 }
 
 /// 设备源错误
-enum DeviceSourceError: Error, Equatable {
+enum DeviceSourceError: LocalizedError, Equatable {
     case connectionFailed(String)
     case permissionDenied
     case windowNotFound
@@ -96,7 +96,7 @@ enum DeviceSourceError: Error, Equatable {
     case deviceInUse(String) // 设备被其他应用占用
     case unknown(String)
 
-    var localizedDescription: String {
+    var errorDescription: String? {
         switch self {
         case let .connectionFailed(reason):
             L10n.error.connectionFailed(reason)
