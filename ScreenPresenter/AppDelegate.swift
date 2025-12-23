@@ -80,6 +80,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
         mainWindow = window
 
+        // 激活应用（确保窗口显示在最前面）
+        NSApp.activate(ignoringOtherApps: true)
+
         AppLogger.app.info("主窗口已创建")
     }
 }

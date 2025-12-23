@@ -37,9 +37,7 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
 
     private var captureSession: AVCaptureSession?
     private var videoOutput: AVCaptureVideoDataOutput?
-    private var audioOutput: AVCaptureAudioDataOutput?
     private let captureQueue = DispatchQueue(label: "com.screenPresenter.ios.capture", qos: .userInteractive)
-    private let audioQueue = DispatchQueue(label: "com.screenPresenter.ios.audio", qos: .userInteractive)
 
     /// 视频输出代理
     private var videoDelegate: VideoCaptureDelegate?
@@ -107,7 +105,6 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
         captureSession?.stopRunning()
         captureSession = nil
         videoOutput = nil
-        audioOutput = nil
         videoDelegate = nil
         _latestPixelBuffer = nil
 
