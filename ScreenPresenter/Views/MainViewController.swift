@@ -476,8 +476,8 @@ final class MainViewController: NSViewController {
                 onStart: { [weak self] in
                     self?.startIOSCapture()
                 },
-                onRefresh: { [weak self] in
-                    self?.refreshIOSDeviceInfo()
+                onRefresh: { [weak self] completion in
+                    self?.refreshIOSDeviceInfo(completion: completion)
                 }
             )
             panel.renderView.clearTexture()
@@ -503,23 +503,37 @@ final class MainViewController: NSViewController {
         Task {
             await AppState.shared.stopIOSCapture()
             await MainActor.run {
-                ToastView.info(L10n.overlayUI.captureStopped(L10n.platform.ios), in: view.window)
+                ToastView.info(L10n.overlayUI.captureStopped(L10n.platform.ios), in: iosPanelView)
             }
         }
     }
 
-    private func refreshIOSDeviceInfo() {
-        // 刷新 iOS 设备信息
+    private func refreshIOSDeviceInfo(completion: @escaping () -> Void) {
+        // 只刷新当前设备的信息（不刷新设备列表）
         let appState = AppState.shared
-        if let udid = appState.iosDeviceProvider.devices.first?.id {
-            // 使用 DeviceInsightService 刷新设备信息
-            _ = DeviceInsightService.shared.refresh(udid: udid)
-            // 刷新 IOSDeviceProvider
-            appState.iosDeviceProvider.refreshDevices()
-            // 触发 UI 更新
-            updateUI()
-            // 显示刷新成功提示
-            ToastView.success(L10n.toolbar.refreshComplete, in: view.window)
+        guard let currentDevice = appState.iosDeviceProvider.devices.first else {
+            completion()
+            return
+        }
+
+        // 异步刷新设备信息
+        Task {
+            // 使用 DeviceInsightService 刷新当前设备的信息
+            let insight = DeviceInsightService.shared.refresh(udid: currentDevice.avUniqueID)
+
+            await MainActor.run {
+                // 更新 IOSDeviceProvider 中的当前设备信息
+                appState.iosDeviceProvider.updateDevice(currentDevice.enriched(with: insight))
+
+                // 触发 UI 更新
+                updateUI()
+
+                // 显示刷新成功提示（在 iOS 面板上弹出）
+                ToastView.success(L10n.toolbar.deviceInfoRefreshed, in: iosPanelView)
+
+                // 完成回调
+                completion()
+            }
         }
     }
 
@@ -537,7 +551,7 @@ final class MainViewController: NSViewController {
         Task {
             await AppState.shared.stopAndroidCapture()
             await MainActor.run {
-                ToastView.info(L10n.overlayUI.captureStopped(L10n.platform.android), in: view.window)
+                ToastView.info(L10n.overlayUI.captureStopped(L10n.platform.android), in: androidPanelView)
             }
         }
     }

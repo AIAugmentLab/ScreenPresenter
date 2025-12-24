@@ -18,8 +18,8 @@
 //
 
 import AppKit
-import FBDeviceControlKit
 import AVFoundation
+import FBDeviceControlKit
 import Foundation
 
 // MARK: - 设备感知服务
@@ -128,7 +128,7 @@ final class DeviceInsightService {
     /// - Parameter udid: 设备 UDID
     /// - Returns: 刷新后的设备信息
     ///
-    /// 注意：对同一 UDID 的刷新操作会串行化执行，避免并发访问 MobileDevice session
+    /// 注意：对同一 UDID 的刷新操作会串行化执行，避免并发访问设备
     @discardableResult
     func refresh(udid: String) -> DeviceInsight {
         // 使用设备专用队列串行化刷新操作
@@ -182,24 +182,20 @@ final class DeviceInsightService {
     // MARK: - 私有方法
 
     /// 获取设备详细信息（内部实现）
-    private func fetchDeviceInsight(for udid: String) -> DeviceInsight {
-        // 优先尝试 FBDeviceControl
-        if let dto = FBDeviceControlService.shared.fetchDeviceInfo(udid: udid) {
-            return DeviceInsight.from(dto: dto)
-        }
-
-        // Fallback: 尝试通过 AVCaptureDevice 获取
-        if let captureDevice = AVCaptureDevice(uniqueID: udid) {
+    /// - Parameter avUniqueID: AVFoundation 的 uniqueID（注意：这不是 iOS 设备的真实 UDID）
+    private func fetchDeviceInsight(for avUniqueID: String) -> DeviceInsight {
+        // 尝试通过 AVCaptureDevice 获取（这样可以拿到设备名称用于匹配）
+        if let captureDevice = AVCaptureDevice(uniqueID: avUniqueID) {
             return fetchDeviceInsight(for: captureDevice)
         }
 
         // 返回降级结果
-        return DeviceInsight.degraded(udid: udid, reason: "无法获取设备信息")
+        return DeviceInsight.degraded(udid: avUniqueID, reason: "无法获取设备信息")
     }
 
     /// 获取设备详细信息（通过 AVCaptureDevice）
     private func fetchDeviceInsight(for captureDevice: AVCaptureDevice) -> DeviceInsight {
-        let udid = captureDevice.uniqueID
+        let avUniqueID = captureDevice.uniqueID
         let deviceName = captureDevice.localizedName
         let modelID = captureDevice.modelID
 
@@ -210,17 +206,31 @@ final class DeviceInsightService {
         // 检测锁屏状态
         let isSuspended = captureDevice.isSuspended
 
-        // 优先尝试 FBDeviceControl 补全信息
-        if let dto = FBDeviceControlService.shared.fetchDeviceInfo(udid: udid) {
+        // 尝试通过设备名称在 FBDeviceControl 中查找匹配的设备
+        // 注意：AVFoundation uniqueID ≠ iOS 真实 UDID，需要通过名称匹配
+        if let dto = findFBDeviceByName(deviceName) {
             var insight = DeviceInsight.from(dto: dto)
+            // 保留 AVFoundation 的 uniqueID 作为标识（用于 AVCaptureDevice 操作）
+            insight = insight.withAVUniqueID(avUniqueID)
             // 用 AVFoundation 的实时状态覆盖
             insight.isOccupied = isOccupied
             insight.occupiedBy = occupiedBy
             if isSuspended {
                 insight.state = .locked
             }
+
+            AppLogger.device.info("""
+            ✅ FBDeviceControl 增强成功:
+              设备名称: \(insight.deviceName)
+              型号标识: \(insight.modelIdentifier)
+              型号名称: \(insight.modelName)
+              系统版本: \(insight.systemVersion ?? "nil")
+              状态: \(insight.state)
+            """)
             return insight
         }
+
+        AppLogger.device.warning("FBDeviceControl: 未能匹配设备 '\(deviceName)'，使用 AVFoundation 降级信息")
 
         // Fallback: 使用 AVFoundation 基础信息
         let modelName = Self.modelName(for: modelID)
@@ -233,7 +243,8 @@ final class DeviceInsightService {
         }
 
         return DeviceInsight(
-            udid: udid,
+            udid: avUniqueID,
+            realUDID: nil, // AVFoundation fallback 时没有真实 UDID
             deviceName: deviceName,
             modelIdentifier: modelID,
             modelName: modelName,
@@ -244,6 +255,113 @@ final class DeviceInsightService {
             occupiedBy: occupiedBy,
             connectionType: .usb
         )
+    }
+
+    /// 通过设备名称在 FBDeviceControl 设备列表中查找匹配的设备
+    /// - Parameter name: 设备名称（来自 AVFoundation localizedName）
+    /// - Returns: 匹配的 FBDeviceInfoDTO，如果找不到返回 nil
+    ///
+    /// 匹配策略优先级：
+    /// 1. 精确名称匹配
+    /// 2. 模糊名称匹配（包含关系）
+    /// 3. 单设备自动匹配（当只有一台 FBDeviceControl 设备时）
+    private func findFBDeviceByName(_ name: String) -> FBDeviceInfoDTO? {
+        guard isFBDeviceControlAvailable else {
+            return nil
+        }
+
+        // 清理设备名称（去掉可能的后缀）
+        let cleanedName = cleanDeviceName(name)
+
+        // 获取所有 FBDeviceControl 设备
+        let allDevices = FBDeviceControlService.shared.listDevices()
+
+        guard !allDevices.isEmpty else {
+            AppLogger.device.warning("FBDeviceControl: 设备列表为空，无法增强设备信息")
+            return nil
+        }
+
+        // 调试：记录 FBDeviceControl 返回的设备详情
+        for (index, dto) in allDevices.enumerated() {
+            AppLogger.device.debug("""
+            FBDeviceControl 设备[\(index)]:
+              名称: \(dto.deviceName)
+              UDID: \(dto.udid)
+              型号标识: \(dto.productType ?? "nil")
+              型号名称: \(dto.modelName ?? "nil")
+              版本: \(dto.productVersion ?? "nil")
+            """)
+        }
+
+        // 策略 1：精确匹配
+        if let exactMatch = allDevices.first(where: { $0.deviceName == cleanedName }) {
+            AppLogger.device.debug("FBDeviceControl: 精确匹配设备 '\(cleanedName)' -> UDID: \(exactMatch.udid)")
+            return exactMatch
+        }
+
+        // 策略 2：模糊匹配（包含关系）
+        if
+            let fuzzyMatch = allDevices.first(where: {
+                $0.deviceName.contains(cleanedName) || cleanedName.contains($0.deviceName)
+            }) {
+            AppLogger.device
+                .debug(
+                    "FBDeviceControl: 模糊匹配设备 '\(cleanedName)' -> '\(fuzzyMatch.deviceName)' UDID: \(fuzzyMatch.udid)"
+                )
+            return fuzzyMatch
+        }
+
+        // 策略 3：单设备自动匹配
+        // 当只有一台 FBDeviceControl 设备时，无论名称是否匹配都使用它
+        // 这解决了 AVFoundation 返回 "iOS Device" 等通用名称的问题
+        if allDevices.count == 1 {
+            let singleDevice = allDevices[0]
+            AppLogger.device
+                .info(
+                    "FBDeviceControl: 单设备自动匹配 '\(cleanedName)' -> '\(singleDevice.deviceName)' UDID: \(singleDevice.udid)"
+                )
+            return singleDevice
+        }
+
+        AppLogger.device.debug("FBDeviceControl: 未找到匹配设备 '\(cleanedName)'，可用设备: \(allDevices.map(\.deviceName))")
+        return nil
+    }
+
+    /// 清理设备名称，去掉系统添加的后缀
+    private func cleanDeviceName(_ name: String) -> String {
+        var cleanName = name
+
+        // 去掉常见后缀
+        let suffixes = [
+            "的相机",
+            "的桌上视角相机",
+            "的摄像头",
+            "'s Camera",
+            "'s Desk View Camera",
+            " Camera",
+        ]
+
+        for suffix in suffixes {
+            if cleanName.hasSuffix(suffix) {
+                cleanName = String(cleanName.dropLast(suffix.count))
+                break
+            }
+        }
+
+        // 去掉首尾引号（英文和中文引号）
+        let quotePatterns: [(String, String)] = [
+            ("\"", "\""),
+            ("\u{201C}", "\u{201D}"), // 中文引号 " "
+        ]
+
+        for (openQuote, closeQuote) in quotePatterns {
+            if cleanName.hasPrefix(openQuote), cleanName.hasSuffix(closeQuote) {
+                cleanName = String(cleanName.dropFirst().dropLast())
+                break
+            }
+        }
+
+        return cleanName.trimmingCharacters(in: .whitespaces)
     }
 
     /// 检测可能占用设备的应用
@@ -268,11 +386,10 @@ extension DeviceInsightService {
     /// 将型号标识符转换为用户友好的名称
     static func modelName(for identifier: String) -> String {
         let modelMap: [String: String] = [
-            // iPhone 17 系列 (2025)
-            "iPhone18,1": "iPhone 17",
-            "iPhone18,2": "iPhone 17 Plus",
-            "iPhone18,3": "iPhone 17 Pro",
-            "iPhone18,4": "iPhone 17 Pro Max",
+            // iPhone 17 系列 (2025) - 与 FBDeviceControl 保持一致
+            "iPhone18,1": "iPhone 17 Pro",
+            "iPhone18,2": "iPhone 17 Pro Max",
+            "iPhone18,3": "iPhone 17",
 
             // iPhone 16 系列 (2024)
             "iPhone17,1": "iPhone 16 Pro",
@@ -369,8 +486,13 @@ extension DeviceInsightService {
 
 /// 设备详细信息
 struct DeviceInsight {
-    /// 设备 UDID
+    /// 设备标识符（AVFoundation uniqueID，用于 AVCaptureDevice 操作）
+    /// 注意：这不是 iOS 设备的真实 UDID，而是 AVFoundation 生成的 UUID
     let udid: String
+
+    /// iOS 设备的真实 UDID（来自 FBDeviceControl，可能为 nil）
+    /// 格式：40位十六进制字符串，如 "00008020-001234567890002E"
+    let realUDID: String?
 
     /// 用户设置的设备名称
     var deviceName: String
@@ -405,7 +527,27 @@ struct DeviceInsight {
         case unknown
     }
 
+    /// 创建一个新的 DeviceInsight，使用指定的 AVFoundation uniqueID
+    /// - Parameter avUniqueID: AVFoundation 的 uniqueID
+    /// - Returns: 更新了 udid 的新 DeviceInsight
+    func withAVUniqueID(_ avUniqueID: String) -> DeviceInsight {
+        DeviceInsight(
+            udid: avUniqueID,
+            realUDID: udid, // 原来的 udid 变成 realUDID
+            deviceName: deviceName,
+            modelIdentifier: modelIdentifier,
+            modelName: modelName,
+            systemVersion: systemVersion,
+            buildVersion: buildVersion,
+            state: state,
+            isOccupied: isOccupied,
+            occupiedBy: occupiedBy,
+            connectionType: connectionType
+        )
+    }
+
     /// 从 FBDeviceInfoDTO 创建
+    /// 注意：创建时 udid 使用 FBDeviceControl 的真实 UDID，后续需要调用 withAVUniqueID() 替换
     static func from(dto: FBDeviceInfoDTO) -> DeviceInsight {
         // 首先检查是否有错误信息，优先使用错误映射
         let state: IOSDevice.State = if let errorDomain = dto.rawErrorDomain, dto.rawErrorCode != nil {
@@ -420,10 +562,12 @@ struct DeviceInsight {
             IOSDeviceStateMapper.mapFromFBDeviceState(dto.rawState)
         }
 
-        let modelName = DeviceInsightService.modelName(for: dto.productType ?? "")
+        // 优先使用 FBDeviceControl 提供的 modelName，否则 fallback 到本地映射
+        let modelName = dto.modelName ?? DeviceInsightService.modelName(for: dto.productType ?? "")
 
         return DeviceInsight(
-            udid: dto.udid,
+            udid: dto.udid, // 这里是 FBDeviceControl 的真实 UDID，会被 withAVUniqueID() 替换
+            realUDID: dto.udid, // 保存真实 UDID
             deviceName: dto.deviceName,
             modelIdentifier: dto.productType ?? "",
             modelName: modelName,
@@ -441,6 +585,7 @@ struct DeviceInsight {
         AppLogger.device.warning("设备信息降级: \(reason)")
         return DeviceInsight(
             udid: udid,
+            realUDID: nil, // 降级时没有真实 UDID
             deviceName: "iOS 设备",
             modelIdentifier: "unknown",
             modelName: L10n.deviceInfo.unknownModel,

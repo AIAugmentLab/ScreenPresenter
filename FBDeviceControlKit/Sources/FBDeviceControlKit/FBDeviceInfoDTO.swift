@@ -27,6 +27,9 @@ public struct FBDeviceInfoDTO: Sendable {
     /// 机型标识（如 "iPhone17,1"）
     public let productType: String?
 
+    /// 用户友好的型号名称（如 "iPhone 17 Pro"）
+    public let modelName: String?
+
     /// 系统 build 版本（如 "22C5125e"）
     public let buildVersion: String?
 
@@ -72,6 +75,7 @@ public struct FBDeviceInfoDTO: Sendable {
         deviceName: String,
         productVersion: String?,
         productType: String?,
+        modelName: String?,
         buildVersion: String?,
         serialNumber: String?,
         modelNumber: String?,
@@ -87,6 +91,7 @@ public struct FBDeviceInfoDTO: Sendable {
         self.deviceName = deviceName
         self.productVersion = productVersion
         self.productType = productType
+        self.modelName = modelName
         self.buildVersion = buildVersion
         self.serialNumber = serialNumber
         self.modelNumber = modelNumber
@@ -113,6 +118,7 @@ public struct FBDeviceInfoDTO: Sendable {
             deviceName: deviceName,
             productVersion: nil,
             productType: productType,
+            modelName: nil,
             buildVersion: nil,
             serialNumber: nil,
             modelNumber: nil,

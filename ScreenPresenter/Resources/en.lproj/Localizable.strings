@@ -190,6 +190,7 @@
 "toolbar.refresh" = "Refresh";
 "toolbar.refreshing" = "Refreshing...";
 "toolbar.refreshComplete" = "Device list refreshed";
+"toolbar.deviceInfoRefreshed" = "Device info refreshed";
 "toolbar.swap" = "Swap";
 "toolbar.preferences" = "Preferences";
 "toolbar.swap.tooltip" = "Swap device positions";
@@ -283,9 +284,6 @@
 
 // MARK: - iOS Device Type
 "ios.deviceType.unknown" = "Unknown";
-
-// MARK: - Mobile Device
-"mobileDevice.loadFailed" = "Cannot load MobileDevice.framework: %@";
 
 // MARK: - Installation Log
 "install.checkingHomebrew" = "🔍 Checking Homebrew...\n";

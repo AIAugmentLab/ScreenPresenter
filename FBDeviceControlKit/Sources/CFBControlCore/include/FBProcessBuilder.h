@@ -7,7 +7,7 @@
 
 #import <Foundation/Foundation.h>
 
-#import "FBProcess.h"
+#import "FBManagedProcess.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -19,7 +19,7 @@ NS_ASSUME_NONNULL_BEGIN
 @class FBProcessInput;
 
 /**
- An interface to building FBProcess instances.
+ An interface to building FBManagedProcess instances.
  */
 @interface FBProcessBuilder <StdInType : id, StdOutType : id, StdErrType : id> : NSObject
 
@@ -260,7 +260,7 @@ NS_ASSUME_NONNULL_BEGIN
 
  @return A future that resolves with the started process..
  */
-- (FBFuture<FBProcess<StdInType, StdOutType, StdErrType> *> *)start;
+- (FBFuture<FBManagedProcess<StdInType, StdOutType, StdErrType> *> *)start;
 
 /**
  Builds and starts the process, then waits for it to complete with the provided exit codes.
@@ -269,7 +269,7 @@ NS_ASSUME_NONNULL_BEGIN
 
  @return a Future, encapsulating the process on completion.
  */
-- (FBFuture<FBProcess<StdInType, StdOutType, StdErrType> *> *)runUntilCompletionWithAcceptableExitCodes:(nullable NSSet<NSNumber *> *)exitCodes;
+- (FBFuture<FBManagedProcess<StdInType, StdOutType, StdErrType> *> *)runUntilCompletionWithAcceptableExitCodes:(nullable NSSet<NSNumber *> *)exitCodes;
 
 @end
 

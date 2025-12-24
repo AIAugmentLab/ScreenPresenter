@@ -60,7 +60,7 @@
 #import "FBMemoryCommands.h"
 #import "FBNotificationCommands.h"
 #import "FBPowerCommands.h"
-#import "FBProcess.h"
+#import "FBManagedProcess.h"
 #import "FBProcessBuilder.h"
 #import "FBProcessFetcher.h"
 #import "FBProcessInfo.h"

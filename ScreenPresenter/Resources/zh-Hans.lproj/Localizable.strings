@@ -190,6 +190,7 @@
 "toolbar.refresh" = "刷新";
 "toolbar.refreshing" = "刷新中...";
 "toolbar.refreshComplete" = "设备列表已刷新";
+"toolbar.deviceInfoRefreshed" = "设备信息已刷新";
 "toolbar.swap" = "交换";
 "toolbar.preferences" = "偏好设置";
 "toolbar.swap.tooltip" = "交换设备位置";
@@ -283,9 +284,6 @@
 
 // MARK: - iOS Device Type
 "ios.deviceType.unknown" = "未知";
-
-// MARK: - Mobile Device
-"mobileDevice.loadFailed" = "无法加载 MobileDevice.framework: %@";
 
 // MARK: - Installation Log
 "install.checkingHomebrew" = "🔍 正在检查 Homebrew...\n";

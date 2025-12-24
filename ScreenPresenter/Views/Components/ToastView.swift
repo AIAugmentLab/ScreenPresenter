@@ -10,6 +10,7 @@
 //
 
 import AppKit
+import SnapKit
 
 // MARK: - Toast 样式
 
@@ -54,6 +55,13 @@ final class ToastView: NSView {
     private let style: ToastStyle
     private let copyable: Bool
 
+    // MARK: - 计时器相关
+
+    private var duration: TimeInterval = 2.5
+    private var dismissWorkItem: DispatchWorkItem?
+    private var trackingArea: NSTrackingArea?
+    private var isMouseInside = false
+
     // MARK: - 初始化
 
     init(message: String, style: ToastStyle = .info, copyable: Bool = false) {
@@ -70,6 +78,7 @@ final class ToastView: NSView {
         super.init(frame: .zero)
 
         setupUI()
+        setupTrackingArea()
     }
 
     @available(*, unavailable)
@@ -127,22 +136,77 @@ final class ToastView: NSView {
         addSubview(stackView)
 
         // 约束
-        stackView.translatesAutoresizingMaskIntoConstraints = false
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        copyButton.translatesAutoresizingMaskIntoConstraints = false
+        stackView.snp.makeConstraints { make in
+            make.edges.equalToSuperview()
+        }
+        iconView.snp.makeConstraints { make in
+            make.size.equalTo(18)
+        }
+        copyButton.snp.makeConstraints { make in
+            make.size.equalTo(20)
+        }
+    }
 
-        NSLayoutConstraint.activate([
-            stackView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stackView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            stackView.topAnchor.constraint(equalTo: topAnchor),
-            stackView.bottomAnchor.constraint(equalTo: bottomAnchor),
+    // MARK: - 鼠标追踪
 
-            iconView.widthAnchor.constraint(equalToConstant: 18),
-            iconView.heightAnchor.constraint(equalToConstant: 18),
+    private func setupTrackingArea() {
+        trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea!)
+    }
 
-            copyButton.widthAnchor.constraint(equalToConstant: 20),
-            copyButton.heightAnchor.constraint(equalToConstant: 20),
-        ])
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea!)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        isMouseInside = true
+        // 取消消失计时器
+        dismissWorkItem?.cancel()
+        dismissWorkItem = nil
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        isMouseInside = false
+        // 重新开始消失计时
+        scheduleDismiss()
+    }
+
+    // MARK: - 消失计时
+
+    private func scheduleDismiss() {
+        dismissWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.dismiss()
+        }
+        dismissWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: workItem)
+    }
+
+    private func dismiss() {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.3
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            self.animator().alphaValue = 0.0
+        } completionHandler: { [weak self] in
+            self?.removeFromSuperview()
+        }
     }
 
     // MARK: - 操作
@@ -164,7 +228,48 @@ final class ToastView: NSView {
 
     // MARK: - 静态方法
 
-    /// 在指定窗口显示 Toast
+    /// 在指定视图中显示 Toast
+    /// - Parameters:
+    ///   - message: 提示信息
+    ///   - style: 样式（默认 .info）
+    ///   - copyable: 是否可复制（默认 false）
+    ///   - duration: 显示时长（默认 2.5 秒）
+    ///   - view: 目标视图
+    @MainActor
+    static func show(
+        _ message: String,
+        style: ToastStyle = .info,
+        copyable: Bool = false,
+        duration: TimeInterval = 2.5,
+        in view: NSView?
+    ) {
+        guard let view else { return }
+
+        let toast = ToastView(message: message, style: style, copyable: copyable)
+        toast.duration = duration
+        toast.alphaValue = 0
+        view.addSubview(toast)
+
+        // 约束
+        toast.snp.makeConstraints { make in
+            make.centerX.equalToSuperview()
+            make.top.equalToSuperview().offset(44)
+            make.width.lessThanOrEqualToSuperview().multipliedBy(0.8)
+            make.width.greaterThanOrEqualTo(200)
+        }
+
+        // 淡入动画
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.25
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            toast.animator().alphaValue = 1.0
+        }
+
+        // 开始消失计时（鼠标悬停时会暂停）
+        toast.scheduleDismiss()
+    }
+
+    /// 在指定窗口显示 Toast（便捷方法）
     /// - Parameters:
     ///   - message: 提示信息
     ///   - style: 样式（默认 .info）
@@ -179,39 +284,36 @@ final class ToastView: NSView {
         duration: TimeInterval = 2.5,
         in window: NSWindow?
     ) {
-        guard let window, let contentView = window.contentView else { return }
-
-        let toast = ToastView(message: message, style: style, copyable: copyable)
-        toast.alphaValue = 0
-        contentView.addSubview(toast)
-
-        // 约束
-        toast.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            toast.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-            toast.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 44),
-            toast.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.8),
-            toast.widthAnchor.constraint(greaterThanOrEqualToConstant: 200),
-        ])
-
-        // 淡入动画
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.25
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            toast.animator().alphaValue = 1.0
-        }
-
-        // 延迟后淡出并移除
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.3
-                context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-                toast.animator().alphaValue = 0.0
-            } completionHandler: {
-                toast.removeFromSuperview()
-            }
-        }
+        show(message, style: style, copyable: copyable, duration: duration, in: window?.contentView)
     }
+
+    // MARK: - 便捷方法（NSView）
+
+    /// 显示成功提示
+    @MainActor
+    static func success(_ message: String, in view: NSView?) {
+        show(message, style: .success, in: view)
+    }
+
+    /// 显示错误提示
+    @MainActor
+    static func error(_ message: String, copyable: Bool = true, in view: NSView?) {
+        show(message, style: .error, copyable: copyable, duration: 4.0, in: view)
+    }
+
+    /// 显示警告提示
+    @MainActor
+    static func warning(_ message: String, in view: NSView?) {
+        show(message, style: .warning, duration: 3.0, in: view)
+    }
+
+    /// 显示信息提示
+    @MainActor
+    static func info(_ message: String, in view: NSView?) {
+        show(message, style: .info, in: view)
+    }
+
+    // MARK: - 便捷方法（NSWindow）
 
     /// 显示成功提示
     @MainActor

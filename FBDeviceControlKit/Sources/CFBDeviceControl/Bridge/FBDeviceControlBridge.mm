@@ -41,6 +41,7 @@ NSString *const kFBDeviceInfoUDID = @"udid";
 NSString *const kFBDeviceInfoDeviceName = @"deviceName";
 NSString *const kFBDeviceInfoProductVersion = @"productVersion";
 NSString *const kFBDeviceInfoProductType = @"productType";
+NSString *const kFBDeviceInfoModelName = @"modelName";
 NSString *const kFBDeviceInfoBuildVersion = @"buildVersion";
 NSString *const kFBDeviceInfoSerialNumber = @"serialNumber";
 NSString *const kFBDeviceInfoModelNumber = @"modelNumber";
@@ -250,7 +251,13 @@ NSString *const kFBDeviceEventStateChanged = @"stateChanged";
     // 设备类型信息
     FBDeviceType *deviceType = device.deviceType;
     if (deviceType) {
-        info[kFBDeviceInfoProductType] = deviceType.model ?: [NSNull null];
+        // productTypes 是原始型号标识符集合（如 "iPhone18,3"）
+        NSString *productType = deviceType.productTypes.anyObject;
+        info[kFBDeviceInfoProductType] = productType ?: [NSNull null];
+        
+        // model 是用户友好名称（如 "iPhone 17 Pro"）
+        NSString *modelName = deviceType.model;
+        info[kFBDeviceInfoModelName] = modelName ?: [NSNull null];
     }
     
     // 系统版本信息

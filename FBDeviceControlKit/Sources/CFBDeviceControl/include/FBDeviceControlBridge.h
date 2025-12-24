@@ -19,6 +19,7 @@ extern NSString *const kFBDeviceInfoUDID;
 extern NSString *const kFBDeviceInfoDeviceName;
 extern NSString *const kFBDeviceInfoProductVersion;
 extern NSString *const kFBDeviceInfoProductType;
+extern NSString *const kFBDeviceInfoModelName;      // 用户友好的型号名称（如 "iPhone 17 Pro"）
 extern NSString *const kFBDeviceInfoBuildVersion;
 extern NSString *const kFBDeviceInfoSerialNumber;
 extern NSString *const kFBDeviceInfoModelNumber;

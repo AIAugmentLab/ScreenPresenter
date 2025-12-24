@@ -7,6 +7,11 @@
 //  iOS 设备模型
 //  表示通过 USB 连接的 iPhone/iPad 设备
 //
+//  ID 设计：
+//  - id: 设备真实 UDID（40位十六进制），用于唯一标识设备
+//  - avUniqueID: AVFoundation uniqueID（UUID 格式），用于 AVCaptureDevice 操作
+//  - 当 FBDeviceControl 不可用时，id 会 fallback 到 avUniqueID
+//
 
 import AVFoundation
 import FBDeviceControlKit
@@ -16,8 +21,14 @@ import Foundation
 
 /// iOS 设备信息
 struct IOSDevice: Identifiable, Hashable {
-    /// 设备唯一 ID（UDID）
+    /// 设备唯一 ID
+    /// 优先使用 iOS 设备的真实 UDID（40位十六进制，如 "00008020-001234567890002E"）
+    /// 当 FBDeviceControl 不可用时，fallback 到 AVFoundation uniqueID
     let id: String
+
+    /// AVFoundation uniqueID（UUID 格式，用于 AVCaptureDevice 操作）
+    /// 这是 AVFoundation 系统生成的 ID，与设备真实 UDID 不同
+    let avUniqueID: String
 
     /// 设备名称（如 "iPhone 15 Pro"）
     let name: String
@@ -53,6 +64,9 @@ struct IOSDevice: Identifiable, Hashable {
     /// 设备型号标识符（如 "iPhone16,1"）
     var productType: String?
 
+    /// 用户友好的型号名称（如 "iPhone 17 Pro"）—— 来自 FBDeviceControl
+    var modelName: String?
+
     /// 系统 build 版本（如 "22C5125e"）—— AVFoundation 无法获取，始终为 nil
     var buildVersion: String?
 
@@ -64,6 +78,11 @@ struct IOSDevice: Identifiable, Hashable {
 
     // MARK: - 计算属性
 
+    /// 是否有真实 UDID（id 不等于 avUniqueID 时表示有真实 UDID）
+    var hasRealUDID: Bool {
+        id != avUniqueID
+    }
+
     /// 显示名称（优先使用设备名，fallback 到 name）
     var displayName: String {
         if let deviceName, !deviceName.isEmpty, deviceName != "iOS 设备" {
@@ -72,15 +91,13 @@ struct IOSDevice: Identifiable, Hashable {
         return name
     }
 
-    /// 详细型号名称
+    /// 详细型号名称（优先使用 FBDeviceControl 提供的 modelName）
     var displayModelName: String? {
-        // 尝试从 modelID 映射
-        if let modelID {
-            let mapped = DeviceInsightService.modelName(for: modelID)
-            if mapped != modelID {
-                return mapped
-            }
+        // 优先使用 FBDeviceControl 提供的用户友好名称
+        if let modelName, !modelName.isEmpty {
+            return modelName
         }
+        // Fallback: 返回型号标识符
         return modelID
     }
 
@@ -188,6 +205,7 @@ struct IOSDevice: Identifiable, Hashable {
 
     init(
         id: String,
+        avUniqueID: String,
         name: String,
         modelID: String? = nil,
         connectionType: ConnectionType = .usb,
@@ -197,11 +215,13 @@ struct IOSDevice: Identifiable, Hashable {
         deviceName: String? = nil,
         productVersion: String? = nil,
         productType: String? = nil,
+        modelName: String? = nil,
         buildVersion: String? = nil,
         isOccupied: Bool = false,
         occupiedBy: String? = nil
     ) {
         self.id = id
+        self.avUniqueID = avUniqueID
         self.name = name
         self.modelID = modelID
         self.connectionType = connectionType
@@ -211,6 +231,7 @@ struct IOSDevice: Identifiable, Hashable {
         self.deviceName = deviceName
         self.productVersion = productVersion
         self.productType = productType ?? modelID
+        self.modelName = modelName
         self.buildVersion = buildVersion
         self.isOccupied = isOccupied
         self.occupiedBy = occupiedBy
@@ -219,6 +240,8 @@ struct IOSDevice: Identifiable, Hashable {
 
     // MARK: - 从 AVCaptureDevice 创建
 
+    /// 从 AVCaptureDevice 创建 IOSDevice
+    /// 注意：此时 id 使用 AVFoundation uniqueID，需要后续通过 enriched() 更新为真实 UDID
     static func from(captureDevice: AVCaptureDevice) -> IOSDevice? {
         let deviceType = captureDevice.deviceType
         let rawName = captureDevice.localizedName
@@ -264,11 +287,8 @@ struct IOSDevice: Identifiable, Hashable {
         // 使用 AVFoundation 检测设备状态
         let (state, isOccupied, occupiedBy) = IOSDeviceStateMapper.detectState(from: captureDevice)
 
-        // 获取型号名称
-        let modelName = DeviceInsightService.modelName(for: modelID)
-
-        // 记录设备信息和状态
-        var logMessage = "发现 iOS 设备: \(displayName), 模型: \(modelName)"
+        // 记录设备信息和状态（此时只有 AVFoundation 基础信息，后续 enriched() 会补充 FBDeviceControl 详情）
+        var logMessage = "发现 iOS 设备: \(displayName), 型号标识: \(modelID)"
         if state == .locked {
             logMessage += " [锁屏/息屏]"
         }
@@ -285,8 +305,11 @@ struct IOSDevice: Identifiable, Hashable {
             AppLogger.device.warning("设备状态提示: \(prompt)")
         }
 
+        // 创建设备：此时 id 暂时使用 avUniqueID，后续 enriched() 会更新为真实 UDID
+        let avUniqueID = captureDevice.uniqueID
         return IOSDevice(
-            id: captureDevice.uniqueID,
+            id: avUniqueID, // 暂时使用 avUniqueID，enriched() 后会更新
+            avUniqueID: avUniqueID,
             name: displayName,
             modelID: modelID,
             connectionType: .usb,
@@ -390,51 +413,157 @@ struct IOSDevice: Identifiable, Hashable {
         return cleanName.trimmingCharacters(in: .whitespaces)
     }
 
-    // MARK: - 从 FBDeviceInfoDTO 增强信息
+    // MARK: - 从 DeviceInsight 增强信息
 
-    /// 使用 FBDeviceControl 信息增强设备
-    /// - Parameter dto: FBDeviceInfoDTO 数据
-    /// - Returns: 增强后的 IOSDevice
-    func enriched(with dto: FBDeviceInfoDTO) -> IOSDevice {
-        var enriched = self
-
-        // 更新设备名称（优先使用 FBDeviceControl 提供的）
-        if !dto.deviceName.isEmpty, dto.deviceName != "iOS 设备" {
-            enriched.deviceName = dto.deviceName
+    /// 使用 DeviceInsight 信息增强设备
+    /// - Parameter insight: DeviceInsight 数据（来自 DeviceInsightService）
+    /// - Returns: 增强后的 IOSDevice（包含真实 UDID）
+    func enriched(with insight: DeviceInsight) -> IOSDevice {
+        // 确定设备 ID：优先使用真实 UDID
+        let deviceID: String
+        if let realUDID = insight.realUDID, !realUDID.isEmpty {
+            deviceID = realUDID
+            AppLogger.device.debug("设备 ID 已更新为真实 UDID: \(realUDID)")
+        } else {
+            deviceID = id // 保持原 ID（可能是 avUniqueID）
         }
 
-        // 更新版本信息（FBDeviceControl 可以获取，AVFoundation 不行）
-        if let version = dto.productVersion {
-            enriched.productVersion = version
+        // 更新设备名称
+        var newDeviceName = deviceName
+        if !insight.deviceName.isEmpty, insight.deviceName != "iOS 设备" {
+            newDeviceName = insight.deviceName
         }
 
-        // 更新型号信息
-        if let productType = dto.productType {
-            enriched.productType = productType
+        // 更新版本信息
+        var newProductVersion = productVersion
+        if let version = insight.systemVersion {
+            newProductVersion = version
+        }
+
+        // 更新型号信息（modelID、productType、modelName）
+        var newModelID = modelID
+        var newProductType = productType
+        var newModelName = modelName
+        if !insight.modelIdentifier.isEmpty, insight.modelIdentifier != "unknown" {
+            newModelID = insight.modelIdentifier
+            newProductType = insight.modelIdentifier
+        }
+        if !insight.modelName.isEmpty {
+            newModelName = insight.modelName
         }
 
         // 更新 build 版本
-        if let buildVersion = dto.buildVersion {
-            enriched.buildVersion = buildVersion
+        var newBuildVersion = buildVersion
+        if let build = insight.buildVersion {
+            newBuildVersion = build
         }
 
-        // 更新状态
-        enriched.state = IOSDeviceStateMapper.mapFromFBDeviceState(dto.rawState)
+        return IOSDevice(
+            id: deviceID,
+            avUniqueID: avUniqueID, // 保持 AVFoundation uniqueID 不变
+            name: name,
+            modelID: newModelID,
+            connectionType: connectionType,
+            locationID: locationID,
+            captureDevice: captureDevice,
+            state: insight.state,
+            deviceName: newDeviceName,
+            productVersion: newProductVersion,
+            productType: newProductType,
+            modelName: newModelName,
+            buildVersion: newBuildVersion,
+            isOccupied: insight.isOccupied,
+            occupiedBy: insight.occupiedBy
+        )
+    }
 
-        // 更新最后检测时间
-        enriched.lastSeenAt = Date()
+    /// 使用 FBDeviceControl 信息增强设备
+    /// - Parameter dto: FBDeviceInfoDTO 数据
+    /// - Returns: 增强后的 IOSDevice（包含真实 UDID）
+    func enriched(with dto: FBDeviceInfoDTO) -> IOSDevice {
+        // 确定设备 ID：使用 FBDeviceControl 提供的真实 UDID
+        let deviceID = dto.udid.isEmpty ? id : dto.udid
 
-        return enriched
+        // 更新设备名称
+        var newDeviceName = deviceName
+        if !dto.deviceName.isEmpty, dto.deviceName != "iOS 设备" {
+            newDeviceName = dto.deviceName
+        }
+
+        // 更新版本信息
+        var newProductVersion = productVersion
+        if let version = dto.productVersion {
+            newProductVersion = version
+        }
+
+        // 更新型号信息（modelID、productType、modelName）
+        var newModelID = modelID
+        var newProductType = productType
+        var newModelName = modelName
+        if let type = dto.productType {
+            newModelID = type
+            newProductType = type
+        }
+        if let name = dto.modelName {
+            newModelName = name
+        }
+
+        // 更新 build 版本
+        var newBuildVersion = buildVersion
+        if let build = dto.buildVersion {
+            newBuildVersion = build
+        }
+
+        // 状态映射：首先检查是否有错误信息，优先使用错误映射
+        let newState: State = if let errorDomain = dto.rawErrorDomain, dto.rawErrorCode != nil {
+            IOSDeviceStateMapper.mapFromError(
+                domain: errorDomain,
+                code: dto.rawErrorCode,
+                description: dto.rawStatusHint
+            )
+        } else {
+            IOSDeviceStateMapper.mapFromFBDeviceState(dto.rawState)
+        }
+
+        return IOSDevice(
+            id: deviceID,
+            avUniqueID: avUniqueID, // 保持 AVFoundation uniqueID 不变
+            name: name,
+            modelID: newModelID,
+            connectionType: connectionType,
+            locationID: locationID,
+            captureDevice: captureDevice,
+            state: newState,
+            deviceName: newDeviceName,
+            productVersion: newProductVersion,
+            productType: newProductType,
+            modelName: newModelName,
+            buildVersion: newBuildVersion,
+            isOccupied: isOccupied,
+            occupiedBy: occupiedBy
+        )
     }
 
     /// 从 FBDeviceInfoDTO 创建 IOSDevice（当 AVFoundation 不可用时的 fallback）
     /// - Parameter dto: FBDeviceInfoDTO 数据
     /// - Returns: IOSDevice 实例
     static func from(dto: FBDeviceInfoDTO) -> IOSDevice {
-        let state = IOSDeviceStateMapper.mapFromFBDeviceState(dto.rawState)
+        // 状态映射：首先检查是否有错误信息，优先使用错误映射
+        let state: IOSDevice.State = if let errorDomain = dto.rawErrorDomain, dto.rawErrorCode != nil {
+            IOSDeviceStateMapper.mapFromError(
+                domain: errorDomain,
+                code: dto.rawErrorCode,
+                description: dto.rawStatusHint
+            )
+        } else {
+            IOSDeviceStateMapper.mapFromFBDeviceState(dto.rawState)
+        }
 
+        // 注意：从 FBDeviceControl 创建时，没有 AVFoundation uniqueID
+        // 使用真实 UDID 作为 avUniqueID 的 fallback
         return IOSDevice(
             id: dto.udid,
+            avUniqueID: dto.udid, // 无 AVFoundation，使用真实 UDID
             name: dto.deviceName,
             modelID: dto.productType,
             connectionType: dto.connectionType == .wifi ? .unknown : .usb,
@@ -444,10 +573,22 @@ struct IOSDevice: Identifiable, Hashable {
             deviceName: dto.deviceName,
             productVersion: dto.productVersion,
             productType: dto.productType,
+            modelName: dto.modelName,
             buildVersion: dto.buildVersion,
             isOccupied: false,
             occupiedBy: nil
         )
+    }
+
+    // MARK: - AVCaptureDevice 操作
+
+    /// 获取关联的 AVCaptureDevice
+    /// 优先使用缓存的 captureDevice，如果不可用则通过 avUniqueID 查找
+    func getAVCaptureDevice() -> AVCaptureDevice? {
+        if let device = captureDevice {
+            return device
+        }
+        return AVCaptureDevice(uniqueID: avUniqueID)
     }
 
     // MARK: - Hashable

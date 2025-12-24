@@ -99,7 +99,7 @@
 // MARK: - Tasks
 
 #import "FBLaunchedApplication.h"
-#import "FBProcess.h"
+#import "FBManagedProcess.h"
 #import "FBProcessBuilder.h"
 
 // MARK: - Utility

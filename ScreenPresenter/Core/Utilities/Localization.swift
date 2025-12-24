@@ -412,6 +412,7 @@ enum L10n {
         static var refresh: String { "toolbar.refresh".localized }
         static var refreshing: String { "toolbar.refreshing".localized }
         static var refreshComplete: String { "toolbar.refreshComplete".localized }
+        static var deviceInfoRefreshed: String { "toolbar.deviceInfoRefreshed".localized }
         static var swap: String { "toolbar.swap".localized }
         static var preferences: String { "toolbar.preferences".localized }
         static var swapTooltip: String { "toolbar.swap.tooltip".localized }
@@ -520,12 +521,6 @@ enum L10n {
 
     enum iosDeviceType {
         static var unknown: String { "ios.deviceType.unknown".localized }
-    }
-
-    // MARK: - Mobile Device
-
-    enum mobileDevice {
-        static func loadFailed(_ error: String) -> String { "mobileDevice.loadFailed".localized(error) }
     }
 
     // MARK: - Installation Log

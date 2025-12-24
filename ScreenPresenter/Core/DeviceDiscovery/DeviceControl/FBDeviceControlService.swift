@@ -133,6 +133,7 @@ final class FBDeviceControlService {
         let deviceName = dictionary[kFBDeviceInfoDeviceName] as? String ?? "iOS 设备"
         let productVersion = dictionary[kFBDeviceInfoProductVersion] as? String
         let productType = dictionary[kFBDeviceInfoProductType] as? String
+        let modelName = dictionary[kFBDeviceInfoModelName] as? String
         let buildVersion = dictionary[kFBDeviceInfoBuildVersion] as? String
         let serialNumber = dictionary[kFBDeviceInfoSerialNumber] as? String
         let modelNumber = dictionary[kFBDeviceInfoModelNumber] as? String
@@ -158,6 +159,7 @@ final class FBDeviceControlService {
             deviceName: deviceName,
             productVersion: productVersion,
             productType: productType,
+            modelName: modelName,
             buildVersion: buildVersion,
             serialNumber: serialNumber,
             modelNumber: modelNumber,

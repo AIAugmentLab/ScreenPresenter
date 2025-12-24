@@ -55,6 +55,26 @@ final class AppState {
 
     private init() {
         androidDeviceProvider = AndroidDeviceProvider(toolchainManager: toolchainManager)
+        setupDeviceProvidersObservation()
+    }
+
+    /// 监听设备提供者的变化
+    private func setupDeviceProvidersObservation() {
+        // 监听 iOS 设备列表变化（包括状态变化）
+        iosDeviceProvider.$devices
+            .dropFirst() // 跳过初始值
+            .sink { [weak self] _ in
+                self?.stateChangedPublisher.send()
+            }
+            .store(in: &cancellables)
+
+        // 监听 Android 设备列表变化
+        androidDeviceProvider.$devices
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.stateChangedPublisher.send()
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - 公开方法
@@ -287,7 +307,7 @@ final class AppState {
         !iosDeviceProvider.devices.isEmpty
     }
 
-    /// iOS 设备名称（优先使用 MobileDevice 增强的名称）
+    /// iOS 设备名称（优先使用 FBDeviceControl 增强的名称）
     var iosDeviceName: String? {
         iosDeviceProvider.devices.first?.displayName
     }

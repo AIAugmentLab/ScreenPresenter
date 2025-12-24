@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#import "FBProcess.h"
+#import "FBManagedProcess.h"
 
 #include <spawn.h>
 
@@ -15,7 +15,6 @@
 #import "FBDataBuffer.h"
 #import "FBDataConsumer.h"
 #import "FBFileWriter.h"
-#import "FBProcess.h"
 #import "FBProcessIO.h"
 #import "FBProcessSpawnCommands.h"
 #import "FBProcessSpawnConfiguration.h"
@@ -57,13 +56,13 @@ static BOOL AddInputFileActions(posix_spawn_file_actions_t *fileActions, FBProce
   return YES;
 }
 
-@interface FBProcess ()
+@interface FBManagedProcess ()
 
 @property (nonatomic, strong, readonly) dispatch_queue_t queue;
 
 @end
 
-@implementation FBProcess
+@implementation FBManagedProcess
 
 @synthesize configuration = _configuration;
 @synthesize exitCode = _exitCode;
@@ -90,7 +89,7 @@ static BOOL AddInputFileActions(posix_spawn_file_actions_t *fileActions, FBProce
   return self;
 }
 
-+ (FBFuture<FBProcess *> *)launchProcessWithConfiguration:(FBProcessSpawnConfiguration *)configuration logger:(id<FBControlCoreLogger>)logger
++ (FBFuture<FBManagedProcess *> *)launchProcessWithConfiguration:(FBProcessSpawnConfiguration *)configuration logger:(id<FBControlCoreLogger>)logger
 {
   dispatch_queue_t queue = dispatch_queue_create("com.facebook.fbcontrolcore.task", DISPATCH_QUEUE_SERIAL);
   return [[configuration.io
@@ -98,7 +97,7 @@ static BOOL AddInputFileActions(posix_spawn_file_actions_t *fileActions, FBProce
     onQueue:queue fmap:^(FBProcessIOAttachment *attachment) {
       // Everything is setup, launch the process now.
       NSError *error = nil;
-      FBProcess *process = [FBProcess processWithConfiguration:configuration attachment:attachment queue:queue logger:logger error:&error];
+      FBManagedProcess *process = [FBManagedProcess processWithConfiguration:configuration attachment:attachment queue:queue logger:logger error:&error];
       if (!process) {
         return [FBFuture futureWithError:error];
       }
@@ -113,7 +112,7 @@ static BOOL AddInputFileActions(posix_spawn_file_actions_t *fileActions, FBProce
   return [[FBMutableFuture.future
     resolveFromFuture:self.exitCode]
     onQueue:self.queue fmap:^(NSNumber *exitCode) {
-      return [[FBProcess confirmExitCode:exitCode.intValue isAcceptable:acceptableExitCodes] mapReplace:exitCode];
+      return [[FBManagedProcess confirmExitCode:exitCode.intValue isAcceptable:acceptableExitCodes] mapReplace:exitCode];
     }];
 }
 
@@ -175,7 +174,7 @@ static BOOL AddInputFileActions(posix_spawn_file_actions_t *fileActions, FBProce
     failFuture];
 }
 
-+ (FBProcess *)processWithConfiguration:(FBProcessSpawnConfiguration *)configuration attachment:(FBProcessIOAttachment *)attachment queue:(dispatch_queue_t)queue logger:(id<FBControlCoreLogger>)logger error:(NSError **)error
++ (FBManagedProcess *)processWithConfiguration:(FBProcessSpawnConfiguration *)configuration attachment:(FBProcessIOAttachment *)attachment queue:(dispatch_queue_t)queue logger:(id<FBControlCoreLogger>)logger error:(NSError **)error
 {
   // Convert the arguments to the argv expected by posix_spawn
   NSArray<NSString *> *arguments = configuration.arguments;
@@ -287,3 +286,4 @@ static BOOL AddInputFileActions(posix_spawn_file_actions_t *fileActions, FBProce
 }
 
 @end
+

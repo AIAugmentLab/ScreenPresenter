@@ -8,7 +8,7 @@
 #import <Foundation/Foundation.h>
 
 #import "FBFuture.h"
-#import "FBProcess.h"
+#import "FBManagedProcess.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -100,7 +100,7 @@ typedef NS_ENUM(NSUInteger, FBCompressionFormat) {
  @param logger the logger to log to.
  @return a Future wrapping the archive data.
  */
-+ (FBFuture<FBProcess<id, NSData *, id> *> *)createGzipDataFromProcessInput:(FBProcessInput *)input logger:(id<FBControlCoreLogger>)logger;
++ (FBFuture<FBManagedProcess<id, NSData *, id> *> *)createGzipDataFromProcessInput:(FBProcessInput *)input logger:(id<FBControlCoreLogger>)logger;
 
 /**
  Creates a gzips archive, returning an task that has an NSInputStream attached to stdout.
@@ -113,7 +113,7 @@ typedef NS_ENUM(NSUInteger, FBCompressionFormat) {
  @param logger the logger to log to.
  @return a Future containing a task with an NSInputStream attached to stdout.
  */
-+ (FBFuture<FBProcess<NSNull *, NSInputStream *, id> *> *)createGzipForPath:(NSString *)path logger:(id<FBControlCoreLogger>)logger;
++ (FBFuture<FBManagedProcess<NSNull *, NSInputStream *, id> *> *)createGzipForPath:(NSString *)path logger:(id<FBControlCoreLogger>)logger;
 
 /**
  Creates a gzipped tar archive, returning an task that has an NSInputStream attached to stdout.
@@ -124,7 +124,7 @@ typedef NS_ENUM(NSUInteger, FBCompressionFormat) {
  @param logger the logger to log to.
  @return a Future containing a task with an NSInputStream attached to stdout.
  */
-+ (FBFuture<FBProcess<NSNull *, NSInputStream *, id> *> *)createGzippedTarForPath:(NSString *)path logger:(id<FBControlCoreLogger>)logger;
++ (FBFuture<FBManagedProcess<NSNull *, NSInputStream *, id> *> *)createGzippedTarForPath:(NSString *)path logger:(id<FBControlCoreLogger>)logger;
 
 /**
  Creates a gzipped tar archive, returning an the data of the tar.

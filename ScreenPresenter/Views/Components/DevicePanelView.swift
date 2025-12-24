@@ -62,6 +62,11 @@ final class DevicePanelView: NSView {
     private var actionButton: PaddedButton!
     private var subtitleLabel: NSTextField!
 
+    /// 刷新按钮
+    private var refreshButton: PaddedButton!
+    /// 刷新加载指示器
+    private var refreshLoadingIndicator: NSProgressIndicator!
+
     // 捕获中的悬浮栏
     private var captureBarView: NSView!
     private var captureIndicator: NSView!
@@ -75,13 +80,10 @@ final class DevicePanelView: NSView {
     private var onStartAction: (() -> Void)?
     private var onStopAction: (() -> Void)?
     private var onInstallAction: (() -> Void)?
-    private var onRefreshAction: (() -> Void)?
+    private var onRefreshAction: ((@escaping () -> Void) -> Void)?
 
     /// 当前设备状态提示（用于 Toast 显示）
     private var currentUserPrompt: String?
-
-    /// 刷新按钮
-    private var refreshButton: NSButton!
 
     // MARK: - 颜色定义（适配黑色背景的屏幕区域）
 
@@ -94,6 +96,8 @@ final class DevicePanelView: NSView {
         static let status = NSColor(white: 0.7, alpha: 1.0)
         /// 提示文字颜色（深灰色）
         static let hint = NSColor(white: 0.5, alpha: 1.0)
+        /// 次要按钮文字颜色（中灰色）
+        static let actionSecondary = NSColor(white: 0.7, alpha: 1.0)
     }
 
     // MARK: - 状态
@@ -283,6 +287,8 @@ final class DevicePanelView: NSView {
         loadingIndicator.controlSize = .regular
         loadingIndicator.isIndeterminate = true
         loadingIndicator.isHidden = true
+        // 强制使用 darkAqua 外观，确保在深色背景下菊花图标可见（白色）
+        loadingIndicator.appearance = NSAppearance(named: .darkAqua)
         contentContainer.addSubview(loadingIndicator)
         loadingIndicator.snp.makeConstraints { make in
             make.top.equalToSuperview()
@@ -365,28 +371,48 @@ final class DevicePanelView: NSView {
             make.centerX.equalToSuperview()
             make.leading.greaterThanOrEqualToSuperview()
             make.trailing.lessThanOrEqualToSuperview()
-            make.bottom.equalToSuperview()
         }
 
-        // 刷新按钮（右上角）
-        refreshButton = NSButton(
-            image: NSImage(
-                systemSymbolName: "arrow.clockwise",
-                accessibilityDescription: L10n.common.refresh
-            )!,
-            target: self,
-            action: #selector(refreshTapped)
+        // 刷新按钮
+        refreshButton = PaddedButton(
+            horizontalPadding: 8,
+            verticalPadding: 4
         )
-        refreshButton.bezelStyle = .circular
+        refreshButton.wantsLayer = true
         refreshButton.isBordered = false
-        refreshButton.contentTintColor = NSColor.white.withAlphaComponent(0.7)
-        refreshButton.toolTip = L10n.common.refresh
-        refreshButton.isHidden = true
-        statusContainerView.addSubview(refreshButton)
+        refreshButton.layer?.cornerRadius = 6
+        refreshButton.layer?.backgroundColor = Colors.actionSecondary.withAlphaComponent(0.2).cgColor
+        refreshButton.focusRingType = .none
+        refreshButton.refusesFirstResponder = true
+        refreshButton.target = self
+        refreshButton.action = #selector(refreshTapped)
+        let buttonFont = NSFont.systemFont(ofSize: 12, weight: .regular)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: Colors.actionSecondary,
+            .font: buttonFont,
+        ]
+        refreshButton.attributedTitle = NSAttributedString(
+            string: L10n.common.refresh,
+            attributes: attributes
+        )
+        contentContainer.addSubview(refreshButton)
         refreshButton.snp.makeConstraints { make in
-            make.top.equalToSuperview().offset(12)
-            make.trailing.equalToSuperview().offset(-12)
-            make.size.equalTo(24)
+            make.top.equalTo(subtitleLabel.snp.bottom).offset(12)
+            make.centerX.equalToSuperview()
+            make.bottom.equalToSuperview()
+        }
+        
+        // 刷新加载指示器（菊花）
+        refreshLoadingIndicator = NSProgressIndicator()
+        refreshLoadingIndicator.style = .spinning
+        refreshLoadingIndicator.controlSize = .small
+        refreshLoadingIndicator.isIndeterminate = true
+        refreshLoadingIndicator.isHidden = true
+        // 强制使用 darkAqua 外观，确保在深色背景下菊花图标可见（白色）
+        refreshLoadingIndicator.appearance = NSAppearance(named: .darkAqua)
+        refreshButton.addSubview(refreshLoadingIndicator)
+        refreshLoadingIndicator.snp.makeConstraints { make in
+            make.center.equalToSuperview()
         }
 
         // 状态栏点击手势（用于显示 Toast 提示）
@@ -519,7 +545,7 @@ final class DevicePanelView: NSView {
         userPrompt: String? = nil,
         deviceState: IOSDevice.State? = nil,
         onStart: @escaping () -> Void,
-        onRefresh: (() -> Void)? = nil
+        onRefresh: ((@escaping () -> Void) -> Void)? = nil
     ) {
         currentState = .connected
         currentPlatform = platform
@@ -570,6 +596,8 @@ final class DevicePanelView: NSView {
 
         // 显示刷新按钮（仅当提供了 onRefresh 回调时）
         refreshButton.isHidden = onRefresh == nil
+        // 确保加载状态重置
+        stopRefreshLoading()
 
         // 构建设备详细信息文本
         let detailInfo = buildDeviceDetailInfo(
@@ -878,15 +906,29 @@ final class DevicePanelView: NSView {
     }
 
     @objc private func refreshTapped() {
-        // 刷新按钮旋转动画
-        refreshButton.wantsLayer = true
-        let animation = CABasicAnimation(keyPath: "transform.rotation.z")
-        animation.fromValue = 0
-        animation.toValue = Double.pi * 2
-        animation.duration = 0.5
-        refreshButton.layer?.add(animation, forKey: "rotation")
+        // 显示加载状态
+        startRefreshLoading()
 
-        onRefreshAction?()
+        // 调用刷新回调，传入完成回调
+        onRefreshAction? { [weak self] in
+            DispatchQueue.main.async {
+                self?.stopRefreshLoading()
+            }
+        }
+    }
+
+    /// 开始刷新加载状态
+    private func startRefreshLoading() {
+        refreshButton.isEnabled = false
+        refreshLoadingIndicator.isHidden = false
+        refreshLoadingIndicator.startAnimation(nil)
+    }
+
+    /// 停止刷新加载状态
+    private func stopRefreshLoading() {
+        refreshButton.isEnabled = true
+        refreshLoadingIndicator.stopAnimation(nil)
+        refreshLoadingIndicator.isHidden = true
     }
 
     @objc private func statusTapped() {

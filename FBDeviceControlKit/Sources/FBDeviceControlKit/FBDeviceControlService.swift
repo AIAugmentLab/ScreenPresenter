@@ -55,7 +55,10 @@ public final class FBDeviceControlService: @unchecked Sendable {
         if isAvailable {
             logger.info("FBDeviceControlService initialized, FBDeviceControl is available")
         } else {
-            logger.warning("FBDeviceControlService: FBDeviceControl not available - \(self.initializationError ?? "Unknown error")")
+            logger
+                .warning(
+                    "FBDeviceControlService: FBDeviceControl not available - \(self.initializationError ?? "Unknown error")"
+                )
         }
     }
 
@@ -138,6 +141,7 @@ public final class FBDeviceControlService: @unchecked Sendable {
         let deviceName = dictionary[kFBDeviceInfoDeviceName] as? String ?? "iOS Device"
         let productVersion = dictionary[kFBDeviceInfoProductVersion] as? String
         let productType = dictionary[kFBDeviceInfoProductType] as? String
+        let modelName = dictionary[kFBDeviceInfoModelName] as? String
         let buildVersion = dictionary[kFBDeviceInfoBuildVersion] as? String
         let serialNumber = dictionary[kFBDeviceInfoSerialNumber] as? String
         let modelNumber = dictionary[kFBDeviceInfoModelNumber] as? String
@@ -163,6 +167,7 @@ public final class FBDeviceControlService: @unchecked Sendable {
             deviceName: deviceName,
             productVersion: productVersion,
             productType: productType,
+            modelName: modelName,
             buildVersion: buildVersion,
             serialNumber: serialNumber,
             modelNumber: modelNumber,
@@ -176,4 +181,3 @@ public final class FBDeviceControlService: @unchecked Sendable {
         )
     }
 }
-

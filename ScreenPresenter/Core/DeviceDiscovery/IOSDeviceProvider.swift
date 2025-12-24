@@ -7,17 +7,16 @@
 //  iOS 设备提供者
 //  使用 AVFoundation 发现和管理 USB 连接的 iOS 设备
 //
-//  双层数据源策略：
-//  1. 主层：AVFoundation（设备发现 + 捕获能力检测）— 稳定的公开 API
-//  2. 增强层：FBDeviceControl（详细设备信息）— 可选，failover 到 AVFoundation
+//  架构职责：
+//  - IOSDeviceProvider：设备发现（AVFoundation）+ 连接状态监控
+//  - DeviceInsightService：设备信息增强（FBDeviceControl）+ 缓存管理
 //
 //  数据流：
-//  AVFoundation 发现设备 → FBDeviceControl 补全信息 → IOSDevice 模型 → UI
+//  AVFoundation 发现设备 → DeviceInsightService 补全信息 → IOSDevice 模型 → UI
 //
 
 import AVFoundation
 import Combine
-import FBDeviceControlKit
 import Foundation
 
 // MARK: - iOS 设备提供者
@@ -35,9 +34,9 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
     /// 最后一次错误
     @Published private(set) var lastError: String?
 
-    /// FBDeviceControl 是否可用
+    /// FBDeviceControl 是否可用（委托给 DeviceInsightService）
     var isFBDeviceControlAvailable: Bool {
-        FBDeviceControlService.shared.isAvailable
+        DeviceInsightService.shared.isFBDeviceControlAvailable
     }
 
     // MARK: - 配置
@@ -52,21 +51,23 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
     private var stateRefreshTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
 
-    /// FBDeviceControl 设备信息缓存 (udid -> FBDeviceInfoDTO)
-    private var fbDeviceInfoCache: [String: FBDeviceInfoDTO] = [:]
-
     // MARK: - 初始化
 
     override init() {
         super.init()
         setupNotifications()
-        setupFBDeviceControl()
+
+        // 记录 FBDeviceControl 状态（由 DeviceInsightService 管理）
+        if isFBDeviceControlAvailable {
+            AppLogger.device.info("IOSDeviceProvider 已初始化，FBDeviceControl 增强可用")
+        } else {
+            AppLogger.device.info("IOSDeviceProvider 已初始化，使用 AVFoundation fallback 模式")
+        }
     }
 
     deinit {
         deviceObservation?.invalidate()
         stateRefreshTask?.cancel()
-        FBDeviceControlService.shared.stopObserving()
     }
 
     // MARK: - 公开方法
@@ -79,61 +80,22 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
         lastError = nil
         setupDiscoverySession()
         startStateRefresh()
-        startFBDeviceControlObserving()
+        setupFBDeviceControlObserver()
     }
 
-    // MARK: - FBDeviceControl 集成
+    /// 设置 FBDeviceControl 设备变化观察
+    /// 当 FBDeviceControl 检测到设备变化时，触发设备列表刷新
+    private func setupFBDeviceControlObserver() {
+        guard isFBDeviceControlAvailable else { return }
 
-    /// 设置 FBDeviceControl
-    private func setupFBDeviceControl() {
-        if FBDeviceControlService.shared.isAvailable {
-            AppLogger.device.info("FBDeviceControl 可用，将用于增强设备信息")
-        } else {
-            let error = FBDeviceControlService.shared.initializationError ?? "未知错误"
-            AppLogger.device.warning("FBDeviceControl 不可用: \(error)，使用 AVFoundation fallback")
-        }
-    }
-
-    /// 开始 FBDeviceControl 观察
-    private func startFBDeviceControlObserving() {
-        guard FBDeviceControlService.shared.isAvailable else { return }
-
-        FBDeviceControlService.shared.onDevicesChanged = { [weak self] fbDevices in
+        FBDeviceControlService.shared.onDevicesChanged = { [weak self] _ in
             Task { @MainActor in
-                self?.handleFBDeviceControlUpdate(fbDevices)
+                AppLogger.device.info("FBDeviceControl 检测到设备变化，刷新设备列表")
+                self?.refreshDevices()
             }
         }
-
         FBDeviceControlService.shared.startObserving()
-    }
-
-    /// 处理 FBDeviceControl 设备更新
-    private func handleFBDeviceControlUpdate(_ fbDevices: [FBDeviceInfoDTO]) {
-        // 更新缓存
-        fbDeviceInfoCache.removeAll()
-        for dto in fbDevices {
-            fbDeviceInfoCache[dto.udid] = dto
-        }
-
-        AppLogger.device.debug("FBDeviceControl 更新: \(fbDevices.count) 台设备")
-
-        // 触发设备列表刷新以应用新信息
-        refreshDevices()
-    }
-
-    /// 使用 FBDeviceControl 信息增强设备
-    private func enrichDevice(_ device: IOSDevice) -> IOSDevice {
-        // 尝试从缓存获取 FBDeviceControl 信息
-        guard let dto = fbDeviceInfoCache[device.id] else {
-            // 尝试实时获取
-            if let dto = FBDeviceControlService.shared.fetchDeviceInfo(udid: device.id) {
-                fbDeviceInfoCache[device.id] = dto
-                return device.enriched(with: dto)
-            }
-            return device
-        }
-
-        return device.enriched(with: dto)
+        AppLogger.device.info("已启动 FBDeviceControl 设备变化观察")
     }
 
     /// 设置设备发现会话
@@ -257,6 +219,12 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
         stateRefreshTask?.cancel()
         stateRefreshTask = nil
 
+        // 停止 FBDeviceControl 观察
+        if isFBDeviceControlAvailable {
+            FBDeviceControlService.shared.stopObserving()
+            FBDeviceControlService.shared.onDevicesChanged = nil
+        }
+
         AppLogger.device.info("iOS 设备监控已停止")
     }
 
@@ -281,9 +249,26 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
         devices.first { $0.id == id }
     }
 
+    /// 更新单个设备的信息（不刷新设备列表）
+    /// - Parameter device: 更新后的设备信息
+    func updateDevice(_ device: IOSDevice) {
+        guard let index = devices.firstIndex(where: { $0.id == device.id }) else {
+            AppLogger.device.warning("更新设备失败：未找到设备 \(device.id)")
+            return
+        }
+        devices[index] = device
+        AppLogger.device.info("设备信息已更新: \(device.displayName)")
+    }
+
     /// 获取 AVCaptureDevice
+    /// - Parameter deviceID: 设备 ID（可以是真实 UDID 或 avUniqueID）
     func captureDevice(for deviceID: String) -> AVCaptureDevice? {
-        AVCaptureDevice(uniqueID: deviceID)
+        // 先查找设备，获取 avUniqueID
+        if let device = devices.first(where: { $0.id == deviceID }) {
+            return AVCaptureDevice(uniqueID: device.avUniqueID)
+        }
+        // fallback: 直接尝试用 deviceID
+        return AVCaptureDevice(uniqueID: deviceID)
     }
 
     // MARK: - 私有方法
@@ -297,10 +282,8 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
             IOSDevice.from(captureDevice: device)
         }
 
-        // 步骤 2：使用 FBDeviceControl 增强设备信息（如果可用）
-        if FBDeviceControlService.shared.isAvailable {
-            iosDevices = iosDevices.map { enrichDevice($0) }
-        }
+        // 步骤 2：通过 DeviceInsightService 增强设备信息
+        iosDevices = iosDevices.map { enrichDevice($0) }
 
         // 检查设备列表或状态是否变化
         let hasDeviceChanges = iosDevices.map(\.id) != devices.map(\.id)
@@ -325,6 +308,13 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
                 }
             }
         }
+    }
+
+    /// 使用 DeviceInsightService 增强设备信息
+    private func enrichDevice(_ device: IOSDevice) -> IOSDevice {
+        // 通过 DeviceInsightService 获取增强信息
+        let insight = DeviceInsightService.shared.getDeviceInsight(for: device.id)
+        return device.enriched(with: insight)
     }
 
     /// 检查设备状态（锁屏、占用等）是否发生变化
@@ -401,18 +391,22 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
         var hasChanges = false
 
         for captureDevice in session.devices {
-            guard let existingDevice = devices.first(where: { $0.id == captureDevice.uniqueID }) else {
+            // 使用 avUniqueID 匹配设备（因为 id 可能是真实 UDID）
+            guard let existingDevice = devices.first(where: { $0.avUniqueID == captureDevice.uniqueID }) else {
                 continue
             }
 
-            // 使用 IOSDeviceStateMapper 重新检测状态
-            let (newState, newIsOccupied, newOccupiedBy) = IOSDeviceStateMapper.detectState(from: captureDevice)
-            let newPrompt = IOSDeviceStateMapper.userPrompt(for: newState, occupiedBy: newOccupiedBy)
+            // 刷新 DeviceInsightService 缓存并重新获取
+            let newInsight = DeviceInsightService.shared.refresh(udid: captureDevice.uniqueID)
 
             // 检测状态变化
             let oldPrompt = existingDevice.userPrompt
             let oldState = existingDevice.state
             let oldIsOccupied = existingDevice.isOccupied
+
+            let newState = newInsight.state
+            let newIsOccupied = newInsight.isOccupied
+            let newPrompt = newInsight.userPrompt
 
             if newState != oldState || newIsOccupied != oldIsOccupied || newPrompt != oldPrompt {
                 hasChanges = true
@@ -462,6 +456,8 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
                 Task { @MainActor in
                     if let device = notification.object as? AVCaptureDevice {
                         AppLogger.device.info("设备已断开: \(device.localizedName)")
+                        // 清除断开设备的缓存
+                        DeviceInsightService.shared.refresh(udid: device.uniqueID)
                     }
                     self?.refreshDevices()
                 }

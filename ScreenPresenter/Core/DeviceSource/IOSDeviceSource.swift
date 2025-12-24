@@ -205,11 +205,11 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
     // MARK: - 捕获会话设置
 
     private func setupCaptureSession() async throws {
-        AppLogger.capture.info("开始配置捕获会话，设备ID: \(iosDevice.id)")
+        AppLogger.capture.info("开始配置捕获会话，设备ID: \(iosDevice.id), avUniqueID: \(iosDevice.avUniqueID)")
 
-        // 获取 AVCaptureDevice
-        guard let captureDevice = AVCaptureDevice(uniqueID: iosDevice.id) else {
-            AppLogger.capture.error("无法获取捕获设备: \(iosDevice.id)")
+        // 获取 AVCaptureDevice（使用 avUniqueID）
+        guard let captureDevice = iosDevice.getAVCaptureDevice() else {
+            AppLogger.capture.error("无法获取捕获设备: \(iosDevice.avUniqueID)")
             throw DeviceSourceError.connectionFailed(L10n.capture.cannotGetDevice(iosDevice.id))
         }
 
