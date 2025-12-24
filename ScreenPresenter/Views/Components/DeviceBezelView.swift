@@ -29,19 +29,17 @@ final class DeviceBezelView: NSView {
     /// 相对于 screenContentView 的顶部（向下为正），用于 captureBar 定位
     private(set) var topFeatureBottomInset: CGFloat = 0
 
-    // MARK: - UI 组件
+    // MARK: - UI 组件（使用嵌套 CALayer 实现连续曲率圆角）
 
-    /// 金属外壳边框图层（外层）
-    private var metalFrameLayer: CAShapeLayer!
-    /// 金属边框高光
-    private var metalHighlightLayer: CAShapeLayer!
-    /// 屏幕黑色边框图层（内层）
-    private var screenBezelLayer: CAShapeLayer!
-    /// 屏幕边框内边缘高光
-    private var innerHighlightLayer: CAShapeLayer!
-    private var screenLayer: CAShapeLayer!
+    /// 金属外壳边框图层（最外层，使用 continuous 圆角）
+    private var metalFrameLayer: CALayer!
+    /// 屏幕黑色边框图层（中间层，使用 continuous 圆角）
+    private var screenBezelLayer: CALayer!
+    /// 顶部特征层（刘海/灵动岛/摄像头开孔）
     private var featureLayer: CAShapeLayer?
+    /// Home 按钮层
     private var homeButtonLayer: CAShapeLayer?
+    /// 侧边按钮层
     private var sideButtonLayers: [CALayer] = []
 
     private(set) var screenContentView: NSView!
@@ -105,37 +103,27 @@ final class DeviceBezelView: NSView {
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
 
+        // 使用嵌套的 CALayer 结构实现边框，所有圆角都使用 .continuous
+        // 结构：metalFrameLayer > screenBezelLayer > screenContentView
+
         // 1. 金属外壳边框（最外层）
-        metalFrameLayer = CAShapeLayer()
-        metalFrameLayer.lineWidth = 0
+        metalFrameLayer = CALayer()
+        metalFrameLayer.masksToBounds = true
+        metalFrameLayer.cornerCurve = .continuous
         layer?.addSublayer(metalFrameLayer)
 
-        // 2. 金属边框高光
-        metalHighlightLayer = CAShapeLayer()
-        metalHighlightLayer.fillColor = nil
-        metalHighlightLayer.lineWidth = 0.5
-        layer?.addSublayer(metalHighlightLayer)
+        // 2. 屏幕黑色边框（中间层，嵌套在金属边框内）
+        screenBezelLayer = CALayer()
+        screenBezelLayer.masksToBounds = true
+        screenBezelLayer.cornerCurve = .continuous
+        metalFrameLayer.addSublayer(screenBezelLayer)
 
-        // 3. 屏幕黑色边框（内层，镂空）
-        screenBezelLayer = CAShapeLayer()
-        screenBezelLayer.lineWidth = 0
-        layer?.addSublayer(screenBezelLayer)
-
-        // 4. 屏幕边框内边缘高光
-        innerHighlightLayer = CAShapeLayer()
-        innerHighlightLayer.fillColor = nil
-        innerHighlightLayer.lineWidth = 0.5
-        layer?.addSublayer(innerHighlightLayer)
-
-        // 5. 屏幕区域
-        screenLayer = CAShapeLayer()
-        screenLayer.fillColor = NSColor.clear.cgColor
-        layer?.addSublayer(screenLayer)
-
+        // 3. 屏幕内容区域（最内层）
         screenContentView = NSView()
         screenContentView.wantsLayer = true
         screenContentView.layer?.backgroundColor = NSColor.clear.cgColor
         screenContentView.layer?.masksToBounds = true
+        screenContentView.layer?.cornerCurve = .continuous
         addSubview(screenContentView)
 
         updateLayers()
@@ -264,113 +252,34 @@ final class DeviceBezelView: NSView {
             height: round(screenRect.height * scale) / scale
         )
 
-        // 绘制两层边框
-        drawMetalFrame(
-            deviceRect: deviceRect,
-            outerCornerRadius: metalOuterCornerRadius,
-            innerRect: metalInnerRect,
-            innerCornerRadius: metalInnerCornerRadius
+        // 使用嵌套 CALayer 实现边框（所有圆角都使用 .continuous）
+
+        // 1. 金属外壳边框（最外层）
+        metalFrameLayer.frame = deviceRect
+        metalFrameLayer.cornerRadius = metalOuterCornerRadius
+        if deviceModel.isIOS {
+            metalFrameLayer.backgroundColor = NSColor(red: 0.72, green: 0.72, blue: 0.74, alpha: 1.0).cgColor
+        } else {
+            metalFrameLayer.backgroundColor = NSColor(red: 0.24, green: 0.86, blue: 0.52, alpha: 1.0).cgColor
+        }
+
+        // 2. 屏幕黑色边框（中间层）- 相对于 metalFrameLayer 的坐标
+        let screenBezelFrame = CGRect(
+            x: metalFrameWidth,
+            y: metalFrameWidth + (hasHomeButton ? deviceWidth * extraBezelRatio * 0.4 : 0),
+            width: metalInnerRect.width,
+            height: metalInnerRect.height
         )
+        screenBezelLayer.frame = screenBezelFrame
+        screenBezelLayer.cornerRadius = screenBezelOuterCornerRadius
+        screenBezelLayer.backgroundColor = NSColor(red: 0.02, green: 0.02, blue: 0.02, alpha: 1.0).cgColor
 
-        drawScreenBezel(
-            outerRect: metalInnerRect,
-            outerCornerRadius: screenBezelOuterCornerRadius,
-            screenRect: screenRect,
-            screenCornerRadius: screenCornerRadius
-        )
-
-        // 内边缘高光（紧贴屏幕边缘）
-        innerHighlightLayer.strokeColor = NSColor(white: 0.20, alpha: 0.3).cgColor
-        innerHighlightLayer.path = NSBezierPath(
-            roundedRect: screenRect,
-            xRadius: screenCornerRadius,
-            yRadius: screenCornerRadius
-        ).cgPath
-
-        // 屏幕区域路径
-        let screenPath = NSBezierPath(roundedRect: screenRect, xRadius: screenCornerRadius, yRadius: screenCornerRadius)
-        screenLayer.path = screenPath.cgPath
-
-        // screenContentView 完全匹配 screenRect
+        // 3. 屏幕内容区域（最内层）- 使用绝对坐标
         screenContentView.frame = screenRect
         screenContentView.layer?.cornerRadius = screenCornerRadius
 
         updateTopFeature(screenRect: screenRect, deviceWidth: deviceWidth)
         updateSideButtons(deviceRect: deviceRect, deviceWidth: deviceWidth, deviceHeight: deviceHeight)
-    }
-
-    /// 绘制金属外壳边框（外层）
-    /// - Parameters:
-    ///   - deviceRect: 设备整体区域
-    ///   - outerCornerRadius: 金属边框外圆角（设备整体圆角）
-    ///   - innerRect: 金属边框内边界（也是屏幕黑边框外边界）
-    ///   - innerCornerRadius: 金属边框内圆角
-    private func drawMetalFrame(
-        deviceRect: CGRect,
-        outerCornerRadius: CGFloat,
-        innerRect: CGRect,
-        innerCornerRadius: CGFloat
-    ) {
-        // 根据设备类型选择边框颜色
-        let metalColor: NSColor
-        let highlightColor: NSColor
-
-        if deviceModel.isIOS {
-            // iOS 设备：Apple 银色
-            metalColor = NSColor(red: 0.72, green: 0.72, blue: 0.74, alpha: 1.0)
-            highlightColor = NSColor(white: 0.90, alpha: 1.0)
-        } else {
-            // Android 设备：Android 绿色 (#3DDC84)
-            metalColor = NSColor(red: 0.24, green: 0.86, blue: 0.52, alpha: 1.0)
-            highlightColor = NSColor(red: 0.40, green: 0.95, blue: 0.65, alpha: 1.0)
-        }
-
-        // 创建镂空路径：金属外壳（外圆角） - 内部区域（内圆角）
-        let outerPath = NSBezierPath(roundedRect: deviceRect, xRadius: outerCornerRadius, yRadius: outerCornerRadius)
-        let innerPath = NSBezierPath(roundedRect: innerRect, xRadius: innerCornerRadius, yRadius: innerCornerRadius)
-
-        outerPath.append(innerPath)
-        outerPath.windingRule = .evenOdd
-
-        metalFrameLayer.fillColor = metalColor.cgColor
-        metalFrameLayer.path = outerPath.cgPath
-        metalFrameLayer.fillRule = .evenOdd
-
-        // 金属边框外边缘高光
-        let outerHighlightRect = deviceRect.insetBy(dx: -0.5, dy: -0.5)
-        metalHighlightLayer.strokeColor = highlightColor.withAlphaComponent(0.4).cgColor
-        metalHighlightLayer.path = NSBezierPath(
-            roundedRect: outerHighlightRect,
-            xRadius: outerCornerRadius + 0.5,
-            yRadius: outerCornerRadius + 0.5
-        ).cgPath
-    }
-
-    /// 绘制屏幕黑色边框（内层）
-    /// - Parameters:
-    ///   - outerRect: 屏幕黑边框外边界（等于金属边框内边界）
-    ///   - outerCornerRadius: 屏幕黑边框外圆角（等于金属边框内圆角）
-    ///   - screenRect: 屏幕区域
-    ///   - screenCornerRadius: 屏幕圆角（最内层圆角）
-    private func drawScreenBezel(
-        outerRect: CGRect,
-        outerCornerRadius: CGFloat,
-        screenRect: CGRect,
-        screenCornerRadius: CGFloat
-    ) {
-        // 屏幕边框使用纯黑色
-        let bezelColor = NSColor(red: 0.02, green: 0.02, blue: 0.02, alpha: 1.0)
-
-        // 创建镂空路径：屏幕边框 - 屏幕区域
-        let outerPath = NSBezierPath(roundedRect: outerRect, xRadius: outerCornerRadius, yRadius: outerCornerRadius)
-        let innerPath = NSBezierPath(roundedRect: screenRect, xRadius: screenCornerRadius, yRadius: screenCornerRadius)
-
-        outerPath.append(innerPath)
-        outerPath.windingRule = .evenOdd
-
-        screenBezelLayer.fillColor = bezelColor.cgColor
-        screenBezelLayer.path = outerPath.cgPath
-        screenBezelLayer.fillRule = .evenOdd
     }
 
     private func updateTopFeature(screenRect: CGRect, deviceWidth: CGFloat) {
@@ -408,8 +317,11 @@ final class DeviceBezelView: NSView {
             layer.shadowOffset = CGSize(width: 0, height: -0.5)
             layer.shadowRadius = 0.5
             layer.shadowOpacity = 0.1
-            layer.path = NSBezierPath(roundedRect: islandRect, xRadius: islandCornerRadius, yRadius: islandCornerRadius)
-                .cgPath
+            layer.path = NSBezierPath(
+                roundedRect: islandRect,
+                xRadius: islandCornerRadius,
+                yRadius: islandCornerRadius
+            ).cgPath
             self.layer?.addSublayer(layer)
             featureLayer = layer
 
@@ -494,8 +406,11 @@ final class DeviceBezelView: NSView {
             innerLayer.fillColor = nil
             innerLayer.strokeColor = NSColor(white: 0.25, alpha: 1.0).cgColor
             innerLayer.lineWidth = 1.0
-            innerLayer.path = NSBezierPath(roundedRect: innerRect, xRadius: innerSize * 0.2, yRadius: innerSize * 0.2)
-                .cgPath
+            innerLayer.path = NSBezierPath(
+                roundedRect: innerRect,
+                xRadius: innerSize * 0.2,
+                yRadius: innerSize * 0.2
+            ).cgPath
 
             layer?.addSublayer(outerLayer)
             layer?.addSublayer(innerLayer)

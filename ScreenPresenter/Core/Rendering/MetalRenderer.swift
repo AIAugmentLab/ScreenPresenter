@@ -400,6 +400,8 @@ final class MetalRenderer {
         }
 
         // 计算点到圆角矩形边缘的有符号距离
+        // 注意：实际的连续曲率圆角由 layer mask 实现（与 DeviceBezelView 共用 createContinuousRoundedRectPath）
+        // 这里保留简单的 SDF 实现作为备用
         float roundedBoxSDF(float2 p, float2 size, float radius) {
             float2 q = abs(p) - size + radius;
             return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - radius;

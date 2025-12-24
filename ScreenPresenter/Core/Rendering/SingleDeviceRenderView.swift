@@ -41,10 +41,11 @@ final class SingleDeviceRenderView: NSView {
 
     // MARK: - 配置
 
-    /// 屏幕圆角半径
+    /// 屏幕圆角半径（使用系统的连续曲率圆角）
     var cornerRadius: CGFloat = 0 {
         didSet {
             metalLayer?.cornerRadius = cornerRadius
+            metalLayer?.cornerCurve = .continuous
         }
     }
 
