@@ -103,7 +103,6 @@ final class MainViewController: NSViewController {
         swapButton.isBordered = false
         swapButton.wantsLayer = true
         swapButton.layer?.cornerRadius = 16
-        swapButton.layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.8).cgColor
         swapButton.toolTip = L10n.toolbar.swapTooltip
         swapButton.focusRingType = .none
         swapButton.refusesFirstResponder = true
@@ -128,6 +127,47 @@ final class MainViewController: NSViewController {
         }
 
         swapButton.layer?.addSublayer(swapButtonIconLayer)
+
+        // 设置初始样式（非全屏模式）- 必须在 swapButtonIconLayer 初始化之后
+        updateSwapButtonStyle(isFullScreen: false)
+    }
+
+    private func updateSwapButtonStyle(isFullScreen: Bool) {
+        guard let layer = swapButton.layer else { return }
+
+        if isFullScreen {
+            // 全屏时使用暗色样式
+            layer.backgroundColor = NSColor.black.withAlphaComponent(0.6).cgColor
+            layer.borderColor = NSColor.white.withAlphaComponent(0.2).cgColor
+            layer.borderWidth = 1
+            layer.shadowColor = NSColor.black.cgColor
+            layer.shadowOpacity = 0.5
+            layer.shadowOffset = CGSize(width: 0, height: -2)
+            layer.shadowRadius = 4
+
+            // 更新图标颜色为浅色
+            if let iconImage = NSImage(systemSymbolName: "arrow.left.arrow.right", accessibilityDescription: nil) {
+                let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .regular)
+                let configuredImage = iconImage.withSymbolConfiguration(config)
+                swapButtonIconLayer.contents = configuredImage?.tinted(with: .white)
+            }
+        } else {
+            // 非全屏时使用默认样式
+            layer.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.8).cgColor
+            layer.borderColor = NSColor.separatorColor.cgColor
+            layer.borderWidth = 1
+            layer.shadowColor = NSColor.black.cgColor
+            layer.shadowOpacity = 0.15
+            layer.shadowOffset = CGSize(width: 0, height: -1)
+            layer.shadowRadius = 3
+
+            // 更新图标颜色为标签色
+            if let iconImage = NSImage(systemSymbolName: "arrow.left.arrow.right", accessibilityDescription: nil) {
+                let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .regular)
+                let configuredImage = iconImage.withSymbolConfiguration(config)
+                swapButtonIconLayer.contents = configuredImage?.tinted(with: .labelColor)
+            }
+        }
     }
 
     @objc private func swapTapped() {
@@ -643,6 +683,9 @@ final class MainViewController: NSViewController {
             view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
             previewContainerView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         }
+
+        // 更新 swapButton 样式
+        updateSwapButtonStyle(isFullScreen: isFullScreen)
 
         // 更新 titlebar 显示状态（全屏时隐藏 toolbar）
         updateTitlebarVisibility(animated: false)
