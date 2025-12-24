@@ -239,6 +239,16 @@ final class PreferencesViewController: NSViewController {
 
             return stack
         })
+
+        // 显示设备边框开关
+        let showBezelCheckbox = NSButton(
+            checkboxWithTitle: L10n.prefs.appearance.showDeviceBezel,
+            target: self,
+            action: #selector(showDeviceBezelChanged(_:))
+        )
+        showBezelCheckbox.state = UserPreferences.shared.showDeviceBezel ? .on : .off
+        appearanceGroup.addArrangedSubview(showBezelCheckbox)
+
         addSettingsGroup(appearanceGroup, to: stackView)
 
         // 布局设置组
@@ -1264,6 +1274,10 @@ final class PreferencesViewController: NSViewController {
         NotificationCenter.default.post(name: .backgroundColorDidChange, object: nil)
     }
 
+    @objc private func showDeviceBezelChanged(_ sender: NSButton) {
+        UserPreferences.shared.showDeviceBezel = sender.state == .on
+    }
+
     @objc private func devicePositionChanged(_ sender: NSSegmentedControl) {
         UserPreferences.shared.iosOnLeft = sender.selectedSegment == 0
     }
@@ -1551,4 +1565,5 @@ final class PreferencesViewController: NSViewController {
 
 extension Notification.Name {
     static let backgroundColorDidChange = Notification.Name("backgroundColorDidChange")
+    static let deviceBezelVisibilityDidChange = Notification.Name("deviceBezelVisibilityDidChange")
 }

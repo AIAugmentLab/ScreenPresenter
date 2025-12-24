@@ -54,6 +54,11 @@ final class MainViewController: NSViewController {
         setupUI()
         setupBindings()
         startRendering()
+
+        // 应用初始 bezel 可见性设置
+        let showBezel = UserPreferences.shared.showDeviceBezel
+        iosPanelView.setBezelVisible(showBezel)
+        androidPanelView.setBezelVisible(showBezel)
     }
 
     override func viewWillDisappear() {
@@ -258,17 +263,32 @@ final class MainViewController: NSViewController {
         // 非全屏时添加上下缩进以平衡视觉效果，全屏时无缩进
         let verticalPadding: CGFloat = isFullScreen ? 0 : 24
 
+        let showBezel = UserPreferences.shared.showDeviceBezel
+
+        // 在全屏模式下隐藏 bezel 时，让面板完全填满容器高度
+        let shouldFillHeight = isFullScreen && !showBezel
+
         // 左右并排布局
         leftPanel.snp.makeConstraints { make in
-            make.top.equalToSuperview().offset(verticalPadding)
-            make.bottom.equalToSuperview().offset(-verticalPadding)
+            if shouldFillHeight {
+                // 全屏隐藏 bezel：填满整个高度
+                make.top.bottom.equalToSuperview()
+            } else {
+                make.top.equalToSuperview().offset(verticalPadding)
+                make.bottom.equalToSuperview().offset(-verticalPadding)
+            }
             make.leading.equalToSuperview()
             make.width.equalToSuperview().multipliedBy(0.5).offset(-panelGap / 2)
         }
 
         rightPanel.snp.makeConstraints { make in
-            make.top.equalToSuperview().offset(verticalPadding)
-            make.bottom.equalToSuperview().offset(-verticalPadding)
+            if shouldFillHeight {
+                // 全屏隐藏 bezel：填满整个高度
+                make.top.bottom.equalToSuperview()
+            } else {
+                make.top.equalToSuperview().offset(verticalPadding)
+                make.bottom.equalToSuperview().offset(-verticalPadding)
+            }
             make.leading.equalTo(leftPanel.snp.trailing).offset(panelGap)
             make.trailing.equalToSuperview()
         }
@@ -313,6 +333,22 @@ final class MainViewController: NSViewController {
             name: .backgroundColorDidChange,
             object: nil
         )
+
+        // 监听 bezel 可见性变化
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleBezelVisibilityChange),
+            name: .deviceBezelVisibilityDidChange,
+            object: nil
+        )
+    }
+
+    @objc private func handleBezelVisibilityChange() {
+        let showBezel = UserPreferences.shared.showDeviceBezel
+        iosPanelView.setBezelVisible(showBezel)
+        androidPanelView.setBezelVisible(showBezel)
+        // 更新布局
+        updatePanelLayout()
     }
 
     @objc private func handleBackgroundColorChange() {

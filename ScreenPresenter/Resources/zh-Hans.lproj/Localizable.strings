@@ -112,6 +112,7 @@
 
 // MARK: - Preferences - Appearance
 "prefs.appearance.backgroundOpacity" = "背景透明度";
+"prefs.appearance.showDeviceBezel" = "显示设备边框";
 
 // MARK: - Preferences - Layout
 "prefs.layout.devicePosition" = "默认设备布局";
@@ -210,6 +211,10 @@
 "toolbar.swap.tooltip" = "交换设备位置";
 "toolbar.refresh.tooltip" = "刷新设备列表";
 "toolbar.preferences.tooltip" = "偏好设置";
+"toolbar.toggleBezel" = "切换边框";
+"toolbar.toggleBezel.tooltip" = "显示/隐藏设备边框";
+"toolbar.showBezel" = "显示边框";
+"toolbar.hideBezel" = "隐藏边框";
 
 // MARK: - Permission
 "permission.unknown" = "未知";

@@ -112,6 +112,7 @@
 
 // MARK: - Preferences - Appearance
 "prefs.appearance.backgroundOpacity" = "Background Opacity";
+"prefs.appearance.showDeviceBezel" = "Show Device Bezel";
 
 // MARK: - Preferences - Layout
 "prefs.layout.devicePosition" = "Default Device Layout";
@@ -210,6 +211,10 @@
 "toolbar.swap.tooltip" = "Swap device positions";
 "toolbar.refresh.tooltip" = "Refresh device list";
 "toolbar.preferences.tooltip" = "Preferences";
+"toolbar.toggleBezel" = "Toggle Bezel";
+"toolbar.toggleBezel.tooltip" = "Show/Hide device bezel";
+"toolbar.showBezel" = "Show Bezel";
+"toolbar.hideBezel" = "Hide Bezel";
 
 // MARK: - Permission
 "permission.unknown" = "Unknown";

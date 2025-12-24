@@ -122,6 +122,11 @@ final class DevicePanelView: NSView {
 
     private var fpsUpdateTimer: Timer?
 
+    // MARK: - Bezel 可见性
+
+    /// 是否显示设备边框
+    private(set) var showBezel: Bool = true
+
     // MARK: - 初始化
 
     override init(frame frameRect: NSRect) {
@@ -203,23 +208,24 @@ final class DevicePanelView: NSView {
         checkMouseInCaptureZone(with: event)
     }
 
-    /// 检查鼠标是否在 captureBar 显示区域内（screenContentView 上方 1/3）
+    /// 检查鼠标是否在 captureBar 显示区域内（渲染区域上方 1/3）
     private func checkMouseInCaptureZone(with event: NSEvent) {
         let locationInView = convert(event.locationInWindow, from: nil)
-        let screen = screenFrame
+        // 使用实际渲染区域来判断
+        let renderRect = actualRenderRect
 
-        guard screen.width > 0, screen.height > 0 else {
+        guard renderRect.width > 0, renderRect.height > 0 else {
             isMouseInside = false
             updateCaptureBarVisibility()
             return
         }
 
         // 计算上方 1/3 区域
-        let topThirdHeight = screen.height / 3
+        let topThirdHeight = renderRect.height / 3
         let captureZone = CGRect(
-            x: screen.minX,
-            y: screen.maxY - topThirdHeight,
-            width: screen.width,
+            x: renderRect.minX,
+            y: renderRect.maxY - topThirdHeight,
+            width: renderRect.width,
             height: topThirdHeight
         )
 
@@ -880,26 +886,88 @@ final class DevicePanelView: NSView {
 
     /// 获取边框屏幕区域的位置（用于 Metal 渲染）
     var screenFrame: CGRect {
-        let bezelScreenFrame = bezelView.screenFrame
-        return bezelView.convert(bezelScreenFrame, to: self)
+        if showBezel {
+            let bezelScreenFrame = bezelView.screenFrame
+            return bezelView.convert(bezelScreenFrame, to: self)
+        } else {
+            // 隐藏 bezel 时，返回整个面板的边界
+            return bounds
+        }
     }
 
     /// 获取设备的宽高比（宽度/高度）
     /// 返回值保证 > 0，避免布局约束问题
     var deviceAspectRatio: CGFloat {
-        let ratio = bezelView.aspectRatio
-        // 确保返回有效的宽高比，避免除零或无效约束
-        return ratio > 0.1 ? ratio : 0.46 // 默认使用 iPhone 的宽高比
+        if showBezel {
+            let ratio = bezelView.aspectRatio
+            // 确保返回有效的宽高比，避免除零或无效约束
+            return ratio > 0.1 ? ratio : 0.46 // 默认使用 iPhone 的宽高比
+        } else {
+            // 隐藏 bezel 时，使用屏幕内容的宽高比
+            let ratio = bezelView.screenAspectRatio
+            return ratio > 0.1 ? ratio : 0.46
+        }
     }
 
     /// 获取屏幕圆角半径（用于 Metal 渲染遮罩）
     var screenCornerRadius: CGFloat {
-        bezelView.screenCornerRadius
+        showBezel ? bezelView.screenCornerRadius : 0
     }
 
     /// 获取顶部特征（刘海/灵动岛/摄像头开孔）的底部距离
     var topFeatureBottomInset: CGFloat {
-        bezelView.topFeatureBottomInset
+        showBezel ? bezelView.topFeatureBottomInset : 0
+    }
+
+    /// 设置 bezel 可见性
+    /// - Parameter visible: 是否显示 bezel
+    func setBezelVisible(_ visible: Bool) {
+        guard showBezel != visible else { return }
+        showBezel = visible
+        updateBezelVisibility()
+    }
+
+    /// 更新 bezel 可见性（重新布局视图）
+    private func updateBezelVisibility() {
+        if showBezel {
+            // 显示 bezel：将 renderView 和 statusContainerView 移回 bezelView.screenContentView
+            bezelView.isHidden = false
+
+            renderView.removeFromSuperview()
+            bezelView.screenContentView.addSubview(renderView)
+            renderView.snp.remakeConstraints { make in
+                make.edges.equalToSuperview()
+            }
+
+            statusContainerView.removeFromSuperview()
+            bezelView.screenContentView.addSubview(statusContainerView)
+            statusContainerView.snp.remakeConstraints { make in
+                make.edges.equalToSuperview()
+            }
+        } else {
+            // 隐藏 bezel：将 renderView 和 statusContainerView 移到 self 中
+            bezelView.isHidden = true
+
+            renderView.removeFromSuperview()
+            addSubview(renderView)
+            renderView.snp.remakeConstraints { make in
+                make.edges.equalToSuperview()
+            }
+
+            statusContainerView.removeFromSuperview()
+            addSubview(statusContainerView)
+            statusContainerView.snp.remakeConstraints { make in
+                make.edges.equalToSuperview()
+            }
+        }
+
+        // 确保 captureBarView 在最上层
+        captureBarView.removeFromSuperview()
+        addSubview(captureBarView)
+
+        // 强制重新布局
+        needsLayout = true
+        layoutSubtreeIfNeeded()
     }
 
     // MARK: - 私有方法
@@ -1031,24 +1099,62 @@ final class DevicePanelView: NSView {
         updateCaptureBarPosition()
     }
 
-    /// 更新捕获栏位置（跟随屏幕区域，考虑刘海/灵动岛/摄像头开孔）
+    /// 更新捕获栏位置（跟随渲染区域，考虑刘海/灵动岛/摄像头开孔）
     private func updateCaptureBarPosition() {
-        let screen = screenFrame
-        guard screen.width > 0, screen.height > 0 else { return }
+        // 获取实际渲染区域（保持视频宽高比）
+        let renderRect = actualRenderRect
+        guard renderRect.width > 0, renderRect.height > 0 else { return }
 
         let barHeight: CGFloat = 28
         let horizontalInset: CGFloat = 20
 
-        // 计算顶部偏移：存在顶部特征， y 从特征底部 + 12 开始
+        // 计算顶部偏移：存在顶部特征，y 从特征底部 + 12 开始
         // 如果没有顶部特征（topFeatureBottomInset == 0），则从屏幕顶部下移 12pt
         let topOffset: CGFloat = max(topFeatureBottomInset, 0) + 12
 
         captureBarView.frame = CGRect(
-            x: screen.minX + horizontalInset,
-            y: screen.maxY - barHeight - topOffset,
-            width: screen.width - horizontalInset * 2,
+            x: renderRect.minX + horizontalInset,
+            y: renderRect.maxY - barHeight - topOffset,
+            width: renderRect.width - horizontalInset * 2,
             height: barHeight
         )
+    }
+
+    /// 获取实际渲染区域（保持视频宽高比居中显示）
+    private var actualRenderRect: CGRect {
+        if showBezel {
+            // 显示 bezel 时，渲染区域就是 screenFrame
+            return screenFrame
+        } else {
+            // 隐藏 bezel 时，需要计算保持视频宽高比的实际渲染区域
+            let containerRect = bounds
+            guard containerRect.width > 0, containerRect.height > 0 else { return .zero }
+
+            // 获取视频宽高比（使用 bezelView 的 screenAspectRatio）
+            let videoAspect = bezelView.screenAspectRatio
+            guard videoAspect > 0 else { return containerRect }
+
+            let containerAspect = containerRect.width / containerRect.height
+
+            var renderWidth: CGFloat
+            var renderHeight: CGFloat
+
+            if videoAspect > containerAspect {
+                // 视频更宽，以宽度为基准
+                renderWidth = containerRect.width
+                renderHeight = renderWidth / videoAspect
+            } else {
+                // 视频更高，以高度为基准
+                renderHeight = containerRect.height
+                renderWidth = renderHeight * videoAspect
+            }
+
+            // 居中
+            let x = (containerRect.width - renderWidth) / 2
+            let y = (containerRect.height - renderHeight) / 2
+
+            return CGRect(x: x, y: y, width: renderWidth, height: renderHeight)
+        }
     }
 
     // MARK: - 语言变更

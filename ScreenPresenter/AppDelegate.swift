@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var windowToolbar: NSToolbar?
     private var refreshToolbarItem: NSToolbarItem?
+    private var toggleBezelToolbarItem: NSToolbarItem?
     private var isRefreshing: Bool = false
 
     // MARK: - 应用生命周期
@@ -61,6 +62,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: LocalizationManager.languageDidChangeNotification,
             object: nil
         )
+
+        // 监听 bezel 可见性变化
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleBezelVisibilityChange),
+            name: .deviceBezelVisibilityDidChange,
+            object: nil
+        )
+    }
+
+    @objc private func handleBezelVisibilityChange() {
+        // 更新工具栏按钮图标
+        if let item = toggleBezelToolbarItem {
+            updateBezelToolbarItemImage(item)
+        }
     }
 
     @objc private func handleLanguageChange() {
@@ -83,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 移除旧工具栏
         window.toolbar = nil
         refreshToolbarItem = nil
+        toggleBezelToolbarItem = nil
 
         // 创建新工具栏
         setupWindowToolbar(for: window)
@@ -327,6 +344,14 @@ extension AppDelegate {
         }
     }
 
+    @IBAction func toggleDeviceBezel(_ sender: Any?) {
+        UserPreferences.shared.showDeviceBezel.toggle()
+        // 更新工具栏按钮图标
+        if let item = toggleBezelToolbarItem {
+            updateBezelToolbarItemImage(item)
+        }
+    }
+
     private func startRefreshLoading() {
         isRefreshing = true
         refreshToolbarItem?.isEnabled = false
@@ -348,16 +373,27 @@ extension AppDelegate {
 extension AppDelegate: NSToolbarDelegate {
     private enum ToolbarItemIdentifier {
         static let refresh = NSToolbarItem.Identifier("refresh")
+        static let toggleBezel = NSToolbarItem.Identifier("toggleBezel")
         static let preferences = NSToolbarItem.Identifier("preferences")
         static let flexibleSpace = NSToolbarItem.Identifier.flexibleSpace
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.flexibleSpace, ToolbarItemIdentifier.refresh, ToolbarItemIdentifier.preferences]
+        [
+            .flexibleSpace,
+            ToolbarItemIdentifier.refresh,
+            ToolbarItemIdentifier.toggleBezel,
+            ToolbarItemIdentifier.preferences,
+        ]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.flexibleSpace, ToolbarItemIdentifier.refresh, ToolbarItemIdentifier.preferences]
+        [
+            .flexibleSpace,
+            ToolbarItemIdentifier.refresh,
+            ToolbarItemIdentifier.toggleBezel,
+            ToolbarItemIdentifier.preferences,
+        ]
     }
 
     func toolbar(
@@ -380,6 +416,17 @@ extension AppDelegate: NSToolbarDelegate {
             refreshToolbarItem = item
             return item
 
+        case ToolbarItemIdentifier.toggleBezel:
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.label = L10n.toolbar.toggleBezel
+            item.paletteLabel = L10n.toolbar.toggleBezel
+            item.toolTip = L10n.toolbar.toggleBezelTooltip
+            updateBezelToolbarItemImage(item)
+            item.target = self
+            item.action = #selector(toggleDeviceBezel(_:))
+            toggleBezelToolbarItem = item
+            return item
+
         case ToolbarItemIdentifier.preferences:
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             item.label = L10n.toolbar.preferences
@@ -393,5 +440,15 @@ extension AppDelegate: NSToolbarDelegate {
         default:
             return nil
         }
+    }
+
+    private func updateBezelToolbarItemImage(_ item: NSToolbarItem) {
+        let showBezel = UserPreferences.shared.showDeviceBezel
+        // 使用不同的图标表示当前状态
+        let symbolName = showBezel ? "iphone" : "iphone.slash"
+        item.image = NSImage(
+            systemSymbolName: symbolName,
+            accessibilityDescription: showBezel ? L10n.toolbar.hideBezel : L10n.toolbar.showBezel
+        )
     }
 }

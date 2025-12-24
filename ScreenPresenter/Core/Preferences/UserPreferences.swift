@@ -43,6 +43,7 @@ final class UserPreferences {
         static let maxReconnectAttempts = "maxReconnectAttempts"
         static let appLanguage = "appLanguage"
         static let backgroundOpacity = "backgroundOpacity"
+        static let showDeviceBezel = "showDeviceBezel"
         static let captureFrameRate = "captureFrameRate"
         static let scrcpyBitrate = "scrcpyBitrate"
         static let scrcpyMaxSize = "scrcpyMaxSize"
@@ -142,6 +143,22 @@ final class UserPreferences {
     /// 获取背景色（固定黑色，透明度可调）
     var backgroundColor: NSColor {
         NSColor.black.withAlphaComponent(backgroundOpacity)
+    }
+
+    /// 是否显示设备边框（默认 true）
+    var showDeviceBezel: Bool {
+        get {
+            // 如果从未设置过，默认为 true
+            if defaults.object(forKey: Keys.showDeviceBezel) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Keys.showDeviceBezel)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.showDeviceBezel)
+            // 发送通知更新 UI
+            NotificationCenter.default.post(name: .deviceBezelVisibilityDidChange, object: nil)
+        }
     }
 
     // MARK: - Capture Settings
@@ -268,6 +285,7 @@ final class UserPreferences {
             Keys.reconnectDelay: 3.0,
             Keys.maxReconnectAttempts: 5,
             Keys.backgroundOpacity: 1.0,
+            Keys.showDeviceBezel: true,
             Keys.captureFrameRate: 60,
             Keys.scrcpyBitrate: 8,
             Keys.scrcpyMaxSize: 1920,

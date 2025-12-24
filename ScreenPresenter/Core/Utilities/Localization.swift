@@ -290,6 +290,7 @@ enum L10n {
 
         enum appearance {
             static var backgroundOpacity: String { "prefs.appearance.backgroundOpacity".localized }
+            static var showDeviceBezel: String { "prefs.appearance.showDeviceBezel".localized }
         }
 
         enum layoutPref {
@@ -433,6 +434,10 @@ enum L10n {
         static var swapTooltip: String { "toolbar.swap.tooltip".localized }
         static var refreshTooltip: String { "toolbar.refresh.tooltip".localized }
         static var preferencesTooltip: String { "toolbar.preferences.tooltip".localized }
+        static var toggleBezel: String { "toolbar.toggleBezel".localized }
+        static var toggleBezelTooltip: String { "toolbar.toggleBezel.tooltip".localized }
+        static var showBezel: String { "toolbar.showBezel".localized }
+        static var hideBezel: String { "toolbar.hideBezel".localized }
     }
 
     // MARK: - Permission
