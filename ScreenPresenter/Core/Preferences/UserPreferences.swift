@@ -38,6 +38,7 @@ final class UserPreferences {
 
     private enum Keys {
         static let iosOnLeft = "iosOnLeft"
+        static let layoutMode = "layoutMode"
         static let autoReconnect = "autoReconnect"
         static let reconnectDelay = "reconnectDelay"
         static let maxReconnectAttempts = "maxReconnectAttempts"
@@ -77,6 +78,24 @@ final class UserPreferences {
         }
         set {
             defaults.set(newValue, forKey: Keys.iosOnLeft)
+        }
+    }
+
+    /// 布局模式（默认 dual：双设备并排显示）
+    var layoutMode: PreviewLayoutMode {
+        get {
+            guard
+                let raw = defaults.string(forKey: Keys.layoutMode),
+                let mode = PreviewLayoutMode(rawValue: raw)
+            else {
+                return .dual
+            }
+            return mode
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Keys.layoutMode)
+            // 发送通知更新 UI
+            NotificationCenter.default.post(name: .layoutModeDidChange, object: nil)
         }
     }
 
@@ -188,7 +207,7 @@ final class UserPreferences {
         get {
             // 需要区分"未设置"和"设置为 0（不限制）"
             if defaults.object(forKey: Keys.scrcpyMaxSize) == nil {
-                return 1920 // 默认值
+                return 0 // 默认值
             }
             return defaults.integer(forKey: Keys.scrcpyMaxSize)
         }
@@ -291,7 +310,7 @@ final class UserPreferences {
             Keys.showDeviceBezel: true,
             Keys.captureFrameRate: 60,
             Keys.scrcpyBitrate: 8,
-            Keys.scrcpyMaxSize: 1920,
+            Keys.scrcpyMaxSize: 0,
             Keys.scrcpyShowTouches: false,
             Keys.useBundledAdb: true,
             Keys.scrcpyPort: 27183,

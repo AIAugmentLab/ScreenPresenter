@@ -217,7 +217,7 @@ final class DeviceStatusView: NSView {
     }
 
     private func setupRefreshButton() {
-        refreshButton = PaddedButton(horizontalPadding: 8, verticalPadding: 4)
+        refreshButton = PaddedButton(horizontalPadding: 10, verticalPadding: 6)
         refreshButton.wantsLayer = true
         refreshButton.isBordered = false
         refreshButton.layer?.cornerRadius = 6
@@ -229,7 +229,7 @@ final class DeviceStatusView: NSView {
         updateRefreshButtonTitle()
         contentContainer.addSubview(refreshButton)
         refreshButton.snp.makeConstraints { make in
-            make.top.equalTo(subtitleLabel.snp.bottom).offset(12)
+            make.top.equalTo(subtitleLabel.snp.bottom).offset(24)
             make.centerX.equalToSuperview()
             make.bottom.equalToSuperview()
         }

@@ -253,6 +253,32 @@ final class PreferencesViewController: NSViewController {
 
         // 布局设置组
         let layoutGroup = createSettingsGroup(title: L10n.prefs.section.layout, icon: "rectangle.split.2x1")
+
+        // 布局模式
+        layoutGroup.addArrangedSubview(createLabeledRow(label: L10n.toolbar.layoutMode) {
+            let segmented = NSSegmentedControl(frame: .zero)
+            segmented.segmentCount = PreviewLayoutMode.allCases.count
+            segmented.trackingMode = .selectOne
+            segmented.segmentStyle = .separated
+
+            for (index, mode) in PreviewLayoutMode.allCases.enumerated() {
+                segmented.setImage(
+                    NSImage(systemSymbolName: mode.iconName, accessibilityDescription: mode.displayName),
+                    forSegment: index
+                )
+                segmented.setToolTip(mode.displayName, forSegment: index)
+                segmented.setWidth(32, forSegment: index)
+            }
+
+            if let index = PreviewLayoutMode.allCases.firstIndex(of: UserPreferences.shared.layoutMode) {
+                segmented.selectedSegment = index
+            }
+            segmented.target = self
+            segmented.action = #selector(layoutModeChanged(_:))
+            return segmented
+        })
+
+        // 默认设备位置
         layoutGroup.addArrangedSubview(createLabeledRow(label: L10n.prefs.layoutPref.devicePosition) {
             let segmented = NSSegmentedControl(
                 labels: [
@@ -1278,6 +1304,12 @@ final class PreferencesViewController: NSViewController {
         UserPreferences.shared.showDeviceBezel = sender.state == .on
     }
 
+    @objc private func layoutModeChanged(_ sender: NSSegmentedControl) {
+        let index = sender.selectedSegment
+        guard index >= 0, index < PreviewLayoutMode.allCases.count else { return }
+        UserPreferences.shared.layoutMode = PreviewLayoutMode.allCases[index]
+    }
+
     @objc private func devicePositionChanged(_ sender: NSSegmentedControl) {
         UserPreferences.shared.iosOnLeft = sender.selectedSegment == 0
     }
@@ -1566,4 +1598,5 @@ final class PreferencesViewController: NSViewController {
 extension Notification.Name {
     static let backgroundColorDidChange = Notification.Name("backgroundColorDidChange")
     static let deviceBezelVisibilityDidChange = Notification.Name("deviceBezelVisibilityDidChange")
+    static let layoutModeDidChange = Notification.Name("layoutModeDidChange")
 }

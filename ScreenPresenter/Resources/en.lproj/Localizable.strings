@@ -70,6 +70,9 @@
 
 // MARK: - Layout
 "layout.sideBySide" = "Side by Side";
+"layout.dual" = "Both Devices";
+"layout.leftOnly" = "Left Device Only";
+"layout.rightOnly" = "Right Device Only";
 
 // MARK: - Theme
 "theme.system" = "Follow System";
@@ -215,6 +218,8 @@
 "toolbar.toggleBezel.tooltip" = "Show/Hide device bezel";
 "toolbar.showBezel" = "Show Bezel";
 "toolbar.hideBezel" = "Hide Bezel";
+"toolbar.layoutMode" = "Layout Mode";
+"toolbar.layoutMode.tooltip" = "Switch display layout mode";
 
 // MARK: - Permission
 "permission.unknown" = "Unknown";

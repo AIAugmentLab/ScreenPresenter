@@ -70,6 +70,9 @@
 
 // MARK: - Layout
 "layout.sideBySide" = "左右并排";
+"layout.dual" = "双设备并排";
+"layout.leftOnly" = "仅左侧设备";
+"layout.rightOnly" = "仅右侧设备";
 
 // MARK: - Theme
 "theme.system" = "跟随系统";
@@ -215,6 +218,8 @@
 "toolbar.toggleBezel.tooltip" = "显示/隐藏设备边框";
 "toolbar.showBezel" = "显示边框";
 "toolbar.hideBezel" = "隐藏边框";
+"toolbar.layoutMode" = "布局模式";
+"toolbar.layoutMode.tooltip" = "切换显示布局模式";
 
 // MARK: - Permission
 "permission.unknown" = "未知";

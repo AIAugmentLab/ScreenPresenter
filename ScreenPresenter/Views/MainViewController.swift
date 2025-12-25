@@ -35,6 +35,8 @@ final class MainViewController: NSViewController {
 
     private var cancellables = Set<AnyCancellable>()
     private var isFullScreen: Bool = false
+    /// 缓存的 titlebar 高度（非全屏时计算并保存）
+    private var cachedTitlebarHeight: CGFloat = 28
 
     // MARK: - 生命周期
 
@@ -56,6 +58,9 @@ final class MainViewController: NSViewController {
             previewContainerView.swapPanels(animated: false)
         }
 
+        // 从偏好设置读取布局模式
+        previewContainerView.setLayoutMode(UserPreferences.shared.layoutMode, animated: false)
+
         // 应用初始 bezel 可见性设置
         previewContainerView.updateBezelVisibility()
     }
@@ -63,6 +68,8 @@ final class MainViewController: NSViewController {
     override func viewDidAppear() {
         super.viewDidAppear()
         // 视图已添加到窗口，可以正确获取 titlebar 高度
+        // 首次出现时缓存 titlebar 高度
+        _ = titlebarHeight
         updatePreviewContainerTopConstraint()
     }
 
@@ -95,14 +102,24 @@ final class MainViewController: NSViewController {
     /// 动态获取 titlebar 高度
     private var titlebarHeight: CGFloat {
         guard let window = view.window else {
-            // 默认值：macOS 标准 titlebar 高度
-            return 28
+            // 默认值：使用缓存值
+            return cachedTitlebarHeight
         }
         // contentLayoutRect 是内容区域的矩形，不包含 titlebar
         // titlebar 高度 = 窗口高度 - 内容区域高度
         let contentHeight = window.contentLayoutRect.height
         let windowHeight = window.frame.height
-        return windowHeight - contentHeight
+        let height = windowHeight - contentHeight
+
+        // 只有在非全屏且计算结果有效时才缓存
+        // 退出全屏过渡期间可能计算为 0，此时使用缓存值
+        if height > 0, !isFullScreen {
+            cachedTitlebarHeight = height
+            return height
+        }
+
+        // 过渡期间或计算为 0 时，返回缓存值
+        return cachedTitlebarHeight
     }
 
     /// 交换按钮（委托给 previewContainerView）
@@ -161,6 +178,12 @@ final class MainViewController: NSViewController {
     }
 
     private func updateSwapButtonVisibility() {
+        // 单设备模式时始终隐藏
+        guard previewContainerView.layoutMode == .dual else {
+            swapButton.isHidden = true
+            swapButton.alphaValue = 0.0
+            return
+        }
         // 非全屏时始终显示，全屏时仅当鼠标在区域内时显示
         let shouldShow = !isFullScreen || isMouseInSwapArea
         swapButton.isHidden = !shouldShow
@@ -260,6 +283,18 @@ final class MainViewController: NSViewController {
             name: .deviceBezelVisibilityDidChange,
             object: nil
         )
+
+        // 监听布局模式变化
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleLayoutModeChange),
+            name: .layoutModeDidChange,
+            object: nil
+        )
+    }
+
+    @objc private func handleLayoutModeChange() {
+        previewContainerView.setLayoutMode(UserPreferences.shared.layoutMode, animated: true)
     }
 
     @objc private func handleBezelVisibilityChange() {

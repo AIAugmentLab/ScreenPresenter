@@ -24,6 +24,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowToolbar: NSToolbar?
     private var refreshToolbarItem: NSToolbarItem?
     private var toggleBezelToolbarItem: NSToolbarItem?
+    private var layoutModeToolbarItem: NSToolbarItem?
+    private var layoutModeSegmentedControl: NSSegmentedControl?
     private var isRefreshing: Bool = false
 
     // MARK: - 应用生命周期
@@ -100,6 +102,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.toolbar = nil
         refreshToolbarItem = nil
         toggleBezelToolbarItem = nil
+        layoutModeToolbarItem = nil
+        layoutModeSegmentedControl = nil
 
         // 创建新工具栏
         setupWindowToolbar(for: window)
@@ -359,6 +363,14 @@ extension AppDelegate {
         }
     }
 
+    @objc private func layoutModeChanged(_ sender: NSSegmentedControl) {
+        let selectedIndex = sender.selectedSegment
+        guard selectedIndex >= 0, selectedIndex < PreviewLayoutMode.allCases.count else { return }
+
+        let newMode = PreviewLayoutMode.allCases[selectedIndex]
+        UserPreferences.shared.layoutMode = newMode
+    }
+
     private func startRefreshLoading() {
         isRefreshing = true
         refreshToolbarItem?.isEnabled = false
@@ -379,6 +391,7 @@ extension AppDelegate {
 
 extension AppDelegate: NSToolbarDelegate {
     private enum ToolbarItemIdentifier {
+        static let layoutMode = NSToolbarItem.Identifier("layoutMode")
         static let refresh = NSToolbarItem.Identifier("refresh")
         static let toggleBezel = NSToolbarItem.Identifier("toggleBezel")
         static let preferences = NSToolbarItem.Identifier("preferences")
@@ -387,6 +400,7 @@ extension AppDelegate: NSToolbarDelegate {
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [
+            ToolbarItemIdentifier.layoutMode,
             .flexibleSpace,
             ToolbarItemIdentifier.refresh,
             ToolbarItemIdentifier.toggleBezel,
@@ -396,6 +410,7 @@ extension AppDelegate: NSToolbarDelegate {
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [
+            ToolbarItemIdentifier.layoutMode,
             .flexibleSpace,
             ToolbarItemIdentifier.refresh,
             ToolbarItemIdentifier.toggleBezel,
@@ -409,6 +424,42 @@ extension AppDelegate: NSToolbarDelegate {
         willBeInsertedIntoToolbar flag: Bool
     ) -> NSToolbarItem? {
         switch itemIdentifier {
+        case ToolbarItemIdentifier.layoutMode:
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.label = L10n.toolbar.layoutMode
+            item.paletteLabel = L10n.toolbar.layoutMode
+            item.toolTip = L10n.toolbar.layoutModeTooltip
+
+            // 创建分段控件
+            let segmentedControl = NSSegmentedControl()
+            segmentedControl.segmentStyle = .separated
+            segmentedControl.trackingMode = .selectOne
+            segmentedControl.segmentCount = 3
+
+            // 设置每个分段的图标
+            for (index, mode) in PreviewLayoutMode.allCases.enumerated() {
+                segmentedControl.setImage(
+                    NSImage(systemSymbolName: mode.iconName, accessibilityDescription: mode.displayName),
+                    forSegment: index
+                )
+                segmentedControl.setToolTip(mode.displayName, forSegment: index)
+                segmentedControl.setWidth(32, forSegment: index)
+            }
+
+            // 读取当前布局模式
+            let currentMode = UserPreferences.shared.layoutMode
+            if let index = PreviewLayoutMode.allCases.firstIndex(of: currentMode) {
+                segmentedControl.selectedSegment = index
+            }
+
+            segmentedControl.target = self
+            segmentedControl.action = #selector(layoutModeChanged(_:))
+
+            item.view = segmentedControl
+            layoutModeToolbarItem = item
+            layoutModeSegmentedControl = segmentedControl
+            return item
+
         case ToolbarItemIdentifier.refresh:
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             item.label = L10n.toolbar.refresh

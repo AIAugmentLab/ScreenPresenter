@@ -235,6 +235,9 @@ enum L10n {
 
     enum layout {
         static var sideBySide: String { "layout.sideBySide".localized }
+        static var dual: String { "layout.dual".localized }
+        static var leftOnly: String { "layout.leftOnly".localized }
+        static var rightOnly: String { "layout.rightOnly".localized }
     }
 
     // MARK: - Theme
@@ -438,6 +441,8 @@ enum L10n {
         static var toggleBezelTooltip: String { "toolbar.toggleBezel.tooltip".localized }
         static var showBezel: String { "toolbar.showBezel".localized }
         static var hideBezel: String { "toolbar.hideBezel".localized }
+        static var layoutMode: String { "toolbar.layoutMode".localized }
+        static var layoutModeTooltip: String { "toolbar.layoutMode.tooltip".localized }
     }
 
     // MARK: - Permission
