@@ -44,7 +44,6 @@ final class MetalRenderer {
 
     // MARK: - 布局
 
-    var layoutMode: LayoutMode = .sideBySide
     var isSwapped: Bool = false
 
     // MARK: - 屏幕区域（用于渲染到设备边框内）
@@ -462,19 +461,5 @@ final class MetalRenderer {
         rightFPS = 0
         leftFrameTimestamps.removeAll()
         rightFrameTimestamps.removeAll()
-    }
-}
-
-// MARK: - 布局模式
-
-enum LayoutMode: String, CaseIterable {
-    case sideBySide = "side_by_side"
-
-    var displayName: String {
-        L10n.layout.sideBySide
-    }
-
-    var icon: String {
-        "rectangle.split.2x1"
     }
 }

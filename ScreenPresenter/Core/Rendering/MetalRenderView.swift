@@ -239,13 +239,6 @@ final class MetalRenderView: NSView {
 
     // MARK: - 布局
 
-    /// 设置布局模式
-    func setLayoutMode(_ mode: LayoutMode) {
-        renderer?.layoutMode = mode
-        needsDisplay = true
-        AppLogger.rendering.info("布局模式已切换: \(mode.rawValue)")
-    }
-
     /// 设置是否交换位置
     func setSwapped(_ swapped: Bool) {
         renderer?.isSwapped = swapped
