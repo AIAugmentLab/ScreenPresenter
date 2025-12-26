@@ -116,8 +116,9 @@ final class DeviceStatusView: NSView {
         titleLabel.font = NSFont.systemFont(ofSize: 28, weight: .semibold)
         titleLabel.textColor = Colors.title
         titleLabel.alignment = .center
-        titleLabel.lineBreakMode = .byTruncatingTail
-        titleLabel.maximumNumberOfLines = 1
+        titleLabel.lineBreakMode = .byWordWrapping
+        titleLabel.maximumNumberOfLines = 2
+        titleLabel.cell?.truncatesLastVisibleLine = true
         contentContainer.addSubview(titleLabel)
     }
 
@@ -162,7 +163,7 @@ final class DeviceStatusView: NSView {
         subtitleLabel.textColor = Colors.hint
         subtitleLabel.alignment = .center
         subtitleLabel.lineBreakMode = .byWordWrapping
-        subtitleLabel.maximumNumberOfLines = 2
+        subtitleLabel.maximumNumberOfLines = 3
         contentContainer.addSubview(subtitleLabel)
     }
 
@@ -456,7 +457,7 @@ final class DeviceStatusView: NSView {
         // 从顶部开始向下布局（macOS 默认坐标系原点在左下角）
         var y: CGFloat = totalHeight
         for (view, spacing, size) in visibleElements {
-            y -= spacing  // 先减去与前一个元素的间距
+            y -= spacing // 先减去与前一个元素的间距
             y -= size.height
             view.frame = CGRect(
                 x: (contentWidth - size.width) / 2,

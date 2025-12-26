@@ -107,16 +107,18 @@ final class DeviceCaptureInfoView: NSView {
         deviceNameLabel.font = NSFont.systemFont(ofSize: 22, weight: .semibold)
         deviceNameLabel.textColor = .white
         deviceNameLabel.alignment = .center
-        deviceNameLabel.lineBreakMode = .byTruncatingTail
-        deviceNameLabel.maximumNumberOfLines = 1
+        deviceNameLabel.lineBreakMode = .byWordWrapping
+        deviceNameLabel.maximumNumberOfLines = 2
+        deviceNameLabel.cell?.truncatesLastVisibleLine = true
         contentContainer.addSubview(deviceNameLabel)
 
         // 设备详细信息（第四行，居中）
         deviceInfoLabel.font = NSFont.systemFont(ofSize: 16, weight: .regular)
         deviceInfoLabel.textColor = NSColor.white.withAlphaComponent(0.7)
         deviceInfoLabel.alignment = .center
-        deviceInfoLabel.lineBreakMode = .byTruncatingTail
-        deviceInfoLabel.maximumNumberOfLines = 1
+        deviceInfoLabel.lineBreakMode = .byWordWrapping
+        deviceInfoLabel.maximumNumberOfLines = 2
+        deviceInfoLabel.cell?.truncatesLastVisibleLine = true
         contentContainer.addSubview(deviceInfoLabel)
     }
 
@@ -187,26 +189,11 @@ final class DeviceCaptureInfoView: NSView {
     // MARK: - 字体自适应
 
     /// 根据可用宽度更新字体大小
-    private func updateFontsForWidth(_ availableWidth: CGFloat) {
-        guard availableWidth > 0 else { return }
-
-        // 更新标题标签字体
-        let titleFont = deviceNameLabel.stringValue.calculateFittingFont(
-            baseSize: deviceNameBaseFontSize,
-            minSize: deviceNameMinFontSize,
-            weight: .semibold,
-            availableWidth: availableWidth
-        )
-        deviceNameLabel.font = titleFont
-
-        // 更新副标题标签字体
-        let subtitleFont = deviceInfoLabel.stringValue.calculateFittingFont(
-            baseSize: deviceInfoBaseFontSize,
-            minSize: deviceInfoMinFontSize,
-            weight: .regular,
-            availableWidth: availableWidth
-        )
-        deviceInfoLabel.font = subtitleFont
+    /// 注意：由于启用了多行换行，这里使用固定字体大小
+    private func updateFontsForWidth(_: CGFloat) {
+        // 使用固定字体大小，依赖多行换行来显示完整内容
+        deviceNameLabel.font = NSFont.systemFont(ofSize: deviceNameBaseFontSize, weight: .semibold)
+        deviceInfoLabel.font = NSFont.systemFont(ofSize: deviceInfoBaseFontSize, weight: .regular)
     }
 
     private func layoutContent() {
@@ -215,18 +202,23 @@ final class DeviceCaptureInfoView: NSView {
 
         // 使用固定高度确保空标签也能正确显示
         let fpsSize = fpsLabel.intrinsicContentSize
-        let topStatusHeight = max(fpsSize.height, 20)  // 最小高度 20
-        let fpsWidth = max(fpsSize.width, 80)  // 最小宽度 80
+        let topStatusHeight = max(fpsSize.height, 20) // 最小高度 20
+        let fpsWidth = max(fpsSize.width, 80) // 最小宽度 80
         let topStatusWidth = min(availableWidth, max(200, fpsWidth))
 
         let resolutionSize = resolutionLabel.intrinsicContentSize
-        let resolutionHeight = max(resolutionSize.height, 20)  // 最小高度 20
-        let resolutionWidth = max(min(availableWidth, resolutionSize.width), 120)  // 最小宽度 120
+        let resolutionHeight = max(resolutionSize.height, 20) // 最小高度 20
+        let resolutionWidth = max(min(availableWidth, resolutionSize.width), 120) // 最小宽度 120
+
+        // 计算多行文本的实际尺寸
+        // 设置 preferredMaxLayoutWidth 以启用多行换行计算
+        deviceNameLabel.preferredMaxLayoutWidth = availableWidth
+        deviceInfoLabel.preferredMaxLayoutWidth = availableWidth
+
         let deviceNameSize = deviceNameLabel.intrinsicContentSize
         let deviceInfoSize = deviceInfoLabel.intrinsicContentSize
 
-        let deviceNameWidth = min(availableWidth, deviceNameSize.width)
-        // deviceInfoLabel 使用可用宽度，允许内容完整显示
+        let deviceNameWidth = availableWidth
         let deviceInfoWidth = availableWidth
 
         let contentWidth = max(topStatusWidth, resolutionWidth, deviceNameWidth, deviceInfoWidth, 48)
@@ -273,7 +265,7 @@ final class DeviceCaptureInfoView: NSView {
         )
         y -= 16
 
-        // 设备名称
+        // 设备名称（使用可用宽度，允许多行换行）
         y -= deviceNameSize.height
         deviceNameLabel.frame = CGRect(
             x: (contentWidth - deviceNameWidth) / 2,
@@ -304,7 +296,7 @@ final class DeviceCaptureInfoView: NSView {
 
         let iconSize: CGFloat = 18
         // SF Symbol 可能有内部 baseline 偏移，视觉上微调 Y 坐标使其看起来居中
-        let iconY = (48 - iconSize) / 2 + 1  // 向上偏移 1 点
+        let iconY = (48 - iconSize) / 2 + 1 // 向上偏移 1 点
         stopButtonIcon.frame = CGRect(
             x: (48 - iconSize) / 2,
             y: iconY,

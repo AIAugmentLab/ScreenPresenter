@@ -279,9 +279,11 @@ final class DeviceBezelView: NSView {
         metalFrameLayer.frame = deviceRect
         metalFrameLayer.cornerRadius = metalOuterCornerRadius
         if deviceModel.isIOS {
-            metalFrameLayer.backgroundColor = NSColor(red: 0.72, green: 0.72, blue: 0.74, alpha: 1.0).cgColor
+            // iOS 设备 - 钛金属银灰色（调暗以降低饱和度）
+            metalFrameLayer.backgroundColor = NSColor(red: 0.45, green: 0.45, blue: 0.47, alpha: 1.0).cgColor
         } else {
-            metalFrameLayer.backgroundColor = NSColor(red: 0.24, green: 0.86, blue: 0.52, alpha: 1.0).cgColor
+            // Android 设备 - 深绿色（调暗并降低饱和度）
+            metalFrameLayer.backgroundColor = NSColor(red: 0.15, green: 0.40, blue: 0.28, alpha: 1.0).cgColor
         }
 
         // 2. 屏幕黑色边框（中间层）- 相对于 metalFrameLayer 的坐标
@@ -569,13 +571,13 @@ final class DeviceBezelView: NSView {
         let highlightColor: NSColor
 
         if deviceModel.isIOS {
-            // iOS 设备：Apple 银色
-            buttonColor = NSColor(red: 0.68, green: 0.68, blue: 0.70, alpha: 1.0)
-            highlightColor = NSColor(white: 0.85, alpha: 0.4)
+            // iOS 设备：深银灰色（与边框一致）
+            buttonColor = NSColor(red: 0.42, green: 0.42, blue: 0.44, alpha: 1.0)
+            highlightColor = NSColor(white: 0.55, alpha: 0.3)
         } else {
-            // Android 设备：Android 绿色
-            buttonColor = NSColor(red: 0.20, green: 0.75, blue: 0.45, alpha: 1.0)
-            highlightColor = NSColor(red: 0.35, green: 0.90, blue: 0.60, alpha: 0.4)
+            // Android 设备：深绿色（与边框一致，降低饱和度）
+            buttonColor = NSColor(red: 0.12, green: 0.35, blue: 0.24, alpha: 1.0)
+            highlightColor = NSColor(red: 0.20, green: 0.45, blue: 0.32, alpha: 0.3)
         }
 
         layer.fillColor = buttonColor.cgColor
