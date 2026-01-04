@@ -348,9 +348,15 @@ final class AppState {
         currentAndroidDevice?.displayName
     }
 
-    /// Android 设备型号名称
+    /// Android 设备型号名称（用于副标题显示，如 "OnePlus PKX110"）
     var androidDeviceModelName: String? {
-        currentAndroidDevice?.displayModelName
+        guard let device = currentAndroidDevice else { return nil }
+        // 返回品牌 + 型号组合，与标题的 marketName 区分
+        if let brand = device.brand, let model = device.model {
+            let formattedModel = model.replacingOccurrences(of: "_", with: " ")
+            return "\(brand) \(formattedModel)"
+        }
+        return device.model?.replacingOccurrences(of: "_", with: " ")
     }
 
     /// Android 系统版本

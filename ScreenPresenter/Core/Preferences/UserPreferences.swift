@@ -58,6 +58,8 @@ final class UserPreferences {
         static let useCustomAdbPath = "useCustomAdbPath"
         static let useCustomScrcpyPath = "useCustomScrcpyPath"
         static let useCustomScrcpyServerPath = "useCustomScrcpyServerPath"
+        // 电源管理
+        static let preventAutoLockDuringCapture = "preventAutoLockDuringCapture"
     }
 
     // MARK: - UserDefaults
@@ -176,6 +178,24 @@ final class UserPreferences {
             defaults.set(newValue, forKey: Keys.showDeviceBezel)
             // 发送通知更新 UI
             NotificationCenter.default.post(name: .deviceBezelVisibilityDidChange, object: nil)
+        }
+    }
+
+    // MARK: - Power Settings
+
+    /// 捕获期间禁止自动锁屏（默认 true）
+    var preventAutoLockDuringCapture: Bool {
+        get {
+            // 如果从未设置过，默认为 true（推荐在捕获时阻止休眠）
+            if defaults.object(forKey: Keys.preventAutoLockDuringCapture) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Keys.preventAutoLockDuringCapture)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.preventAutoLockDuringCapture)
+            // 发送通知更新 UI 和协调器
+            NotificationCenter.default.post(name: .preventAutoLockSettingDidChange, object: nil)
         }
     }
 

@@ -274,6 +274,7 @@ enum L10n {
             static var layout: String { "prefs.section.layout".localized }
             static var connection: String { "prefs.section.connection".localized }
             static var frameRate: String { "prefs.section.frameRate".localized }
+            static var android: String { "prefs.section.android".localized }
             static var video: String { "prefs.section.video".localized }
             static var display: String { "prefs.section.display".localized }
             static var advanced: String { "prefs.section.advanced".localized }
@@ -294,6 +295,12 @@ enum L10n {
         enum appearance {
             static var backgroundOpacity: String { "prefs.appearance.backgroundOpacity".localized }
             static var showDeviceBezel: String { "prefs.appearance.showDeviceBezel".localized }
+        }
+
+        enum power {
+            static var sectionTitle: String { "prefs.power.sectionTitle".localized }
+            static var preventAutoLock: String { "prefs.power.preventAutoLock".localized }
+            static var preventAutoLockHelp: String { "prefs.power.preventAutoLockHelp".localized }
         }
 
         enum layoutPref {
@@ -441,6 +448,10 @@ enum L10n {
         static var hideBezel: String { "toolbar.hideBezel".localized }
         static var layoutMode: String { "toolbar.layoutMode".localized }
         static var layoutModeTooltip: String { "toolbar.layoutMode.tooltip".localized }
+        static var preventSleep: String { "toolbar.preventSleep".localized }
+        static var preventSleepTooltip: String { "toolbar.preventSleep.tooltip".localized }
+        static var preventSleepOn: String { "toolbar.preventSleep.on".localized }
+        static var preventSleepOff: String { "toolbar.preventSleep.off".localized }
     }
 
     // MARK: - Permission

@@ -400,7 +400,7 @@ final class DevicePanelView: NSView {
     ) -> String {
         var parts: [String] = []
 
-        // 型号名称（如 iPhone 15 Pro 或 M2007J17C）
+        // 型号名称（如 iPhone 15 Pro 或 OnePlus PKX110）
         if let model = modelName, !model.isEmpty {
             parts.append(model)
         }
@@ -415,12 +415,9 @@ final class DevicePanelView: NSView {
                     parts.append("iOS \(version)")
                 }
             } else {
-                // Android 版本格式：Android 12 (API 31)
-                if let sdk = sdkVersion, !sdk.isEmpty {
-                    parts.append("\(version) (SDK \(sdk))")
-                } else {
-                    parts.append(version)
-                }
+                // Android 版本：直接使用已格式化的 displaySystemVersion
+                // 格式如: ColorOS 15(Android 15 · SDK 35) 或 Android 15(SDK 35)
+                parts.append(version)
             }
         }
 
@@ -543,16 +540,9 @@ final class DevicePanelView: NSView {
         // 保存设备信息用于更新状态栏
         currentDeviceDisplayName = deviceName
         currentDeviceModelName = modelName
-        // 格式化系统版本：Android 版本附加 SDK 版本
-        if platform == .android, let version = systemVersion {
-            if let sdk = sdkVersion, !sdk.isEmpty {
-                currentDeviceSystemVersion = "\(version) (SDK \(sdk))"
-            } else {
-                currentDeviceSystemVersion = version
-            }
-        } else {
-            currentDeviceSystemVersion = systemVersion
-        }
+        // Android 的 systemVersion 已经是完整格式（如 ColorOS 15(Android 15 · SDK 35)）
+        // iOS 不需要额外处理
+        currentDeviceSystemVersion = systemVersion
 
         // 更新 bezel：
         // - resolution 有效时（收到第一帧后）：使用实际分辨率的 aspectRatio

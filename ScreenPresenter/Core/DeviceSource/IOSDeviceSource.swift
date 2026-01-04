@@ -198,6 +198,9 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
         let session = AVCaptureSession()
         session.sessionPreset = .high
 
+        // 配置捕获帧率
+        configureFrameRate(for: captureDevice)
+
         // 添加视频输入
         do {
             let videoInput = try AVCaptureDeviceInput(device: captureDevice)
@@ -279,6 +282,60 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
 
         // 直接回调通知渲染视图
         onFrame?(pixelBuffer)
+    }
+
+    // MARK: - 帧率配置
+
+    /// 配置设备帧率
+    /// - Parameter device: AVCaptureDevice 实例
+    private func configureFrameRate(for device: AVCaptureDevice) {
+        let targetFps = UserPreferences.shared.captureFrameRate
+        let targetDuration = CMTime(value: 1, timescale: CMTimeScale(targetFps))
+
+        // 查找支持目标帧率的格式
+        // iOS 设备通过 CoreMediaIO 暴露时，格式支持可能有限
+        // 我们尝试设置帧率，如果失败则使用默认值
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+
+            // 检查当前格式是否支持目标帧率
+            let format = device.activeFormat
+            var bestFrameRateRange: AVFrameRateRange?
+
+            for range in format.videoSupportedFrameRateRanges {
+                // 检查目标帧率是否在支持范围内
+                if range.minFrameRate <= Double(targetFps) && Double(targetFps) <= range.maxFrameRate {
+                    bestFrameRateRange = range
+                    break
+                }
+
+                // 否则找到最接近的范围
+                if bestFrameRateRange == nil || range.maxFrameRate > bestFrameRateRange!.maxFrameRate {
+                    bestFrameRateRange = range
+                }
+            }
+
+            if let range = bestFrameRateRange {
+                // 目标帧率在支持范围内，直接设置
+                if range.minFrameRate <= Double(targetFps) && Double(targetFps) <= range.maxFrameRate {
+                    device.activeVideoMinFrameDuration = targetDuration
+                    device.activeVideoMaxFrameDuration = targetDuration
+                    AppLogger.capture.info("iOS 帧率已配置: \(targetFps) fps")
+                } else {
+                    // 目标帧率超出支持范围，使用最大支持帧率
+                    let maxSupportedFps = Int(range.maxFrameRate)
+                    let actualDuration = CMTime(value: 1, timescale: CMTimeScale(maxSupportedFps))
+                    device.activeVideoMinFrameDuration = actualDuration
+                    device.activeVideoMaxFrameDuration = actualDuration
+                    AppLogger.capture.info("iOS 帧率已配置: \(maxSupportedFps) fps（目标 \(targetFps) fps 不支持）")
+                }
+            } else {
+                AppLogger.capture.warning("无法获取帧率支持范围，使用设备默认帧率")
+            }
+        } catch {
+            AppLogger.capture.warning("无法配置 iOS 帧率: \(error.localizedDescription)")
+        }
     }
 }
 

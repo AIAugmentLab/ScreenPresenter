@@ -98,6 +98,7 @@
 "prefs.section.layout" = "Layout";
 "prefs.section.connection" = "Connection";
 "prefs.section.frameRate" = "Frame Rate";
+"prefs.section.android" = "Android (Scrcpy)";
 "prefs.section.video" = "Video";
 "prefs.section.display" = "Display";
 "prefs.section.advanced" = "Advanced";
@@ -116,6 +117,11 @@
 // MARK: - Preferences - Appearance
 "prefs.appearance.backgroundOpacity" = "Background Opacity";
 "prefs.appearance.showDeviceBezel" = "Show Device Bezel";
+
+// MARK: - Preferences - Power
+"prefs.power.sectionTitle" = "Power Management";
+"prefs.power.preventAutoLock" = "Prevent Auto Lock During Capture";
+"prefs.power.preventAutoLockHelp" = "Prevents system auto sleep/lock only. Manual lock is not affected.";
 
 // MARK: - Preferences - Layout
 "prefs.layout.devicePosition" = "Default Device Layout";
@@ -218,6 +224,10 @@
 "toolbar.hideBezel" = "Hide Bezel";
 "toolbar.layoutMode" = "Layout Mode";
 "toolbar.layoutMode.tooltip" = "Switch display layout mode";
+"toolbar.preventSleep" = "Prevent Sleep";
+"toolbar.preventSleep.tooltip" = "Prevent auto sleep/lock during capture";
+"toolbar.preventSleep.on" = "Sleep prevention enabled";
+"toolbar.preventSleep.off" = "Sleep prevention disabled";
 
 // MARK: - Permission
 "permission.unknown" = "Unknown";

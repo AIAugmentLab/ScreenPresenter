@@ -8,9 +8,11 @@
 
 /* Begin PBXBuildFile section */
 		3D08D092E75081FC3BA6C7A9 /* IOSDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC7BD7E5F57E69F54F103E7C /* IOSDevice.swift */; };
+		7C9E7C8622DBA7F73CEC7DF7 /* SystemSleepBlocker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E8B56161A4793149B39A9D /* SystemSleepBlocker.swift */; };
 		87C2CDD72DD49C69CE97F0CB /* IOSDeviceProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C002C5D5475783B3147480AC /* IOSDeviceProvider.swift */; };
 		908C36A37CB44D844E526D8E /* IOSScreenMirrorActivator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FA214349613EC0729564B6E /* IOSScreenMirrorActivator.swift */; };
 		A1000001241A0001000001A1 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001241A0002000001A1 /* AppDelegate.swift */; };
+		A2771ABD034F7D36AB14C564 /* CapturePowerCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5168A0E78981463868422AC4 /* CapturePowerCoordinator.swift */; };
 		A441333F2EF93201003DCDD3 /* ProcessRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44133102EF93201003DCDD3 /* ProcessRunner.swift */; };
 		A44133412EF93201003DCDD3 /* UserPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = A441330E2EF93201003DCDD3 /* UserPreferences.swift */; };
 		A44133452EF93201003DCDD3 /* ScrcpyDeviceSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44133082EF93201003DCDD3 /* ScrcpyDeviceSource.swift */; };
@@ -53,6 +55,7 @@
 
 /* Begin PBXFileReference section */
 		2C66B6DF8C1E31F829EDE370 /* IOSDeviceSource.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = IOSDeviceSource.swift; sourceTree = "<group>"; };
+		5168A0E78981463868422AC4 /* CapturePowerCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CapturePowerCoordinator.swift; sourceTree = "<group>"; };
 		8FA214349613EC0729564B6E /* IOSScreenMirrorActivator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = IOSScreenMirrorActivator.swift; sourceTree = "<group>"; };
 		A1000001241A0000000001A1 /* ScreenPresenter.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ScreenPresenter.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1000001241A0002000001A1 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -70,6 +73,7 @@
 		A44133222EF93201003DCDD3 /* Tools */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Tools; sourceTree = "<group>"; };
 		A44133242EF93201003DCDD3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A4BF9B8A2EFCF160003DD09D /* PreviewContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewContainerView.swift; sourceTree = "<group>"; };
+		A6E8B56161A4793149B39A9D /* SystemSleepBlocker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SystemSleepBlocker.swift; sourceTree = "<group>"; };
 		B1000002000000000001 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		B1000002000000000002 /* MetalRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalRenderer.swift; sourceTree = "<group>"; };
 		B1000002000000000003 /* MetalRenderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalRenderView.swift; sourceTree = "<group>"; };
@@ -201,6 +205,8 @@
 				F1000002000000000001 /* Colors.swift */,
 				A441331F2EF93201003DCDD3 /* Logger.swift */,
 				B1000002000000000010 /* Localization.swift */,
+				A6E8B56161A4793149B39A9D /* SystemSleepBlocker.swift */,
+				5168A0E78981463868422AC4 /* CapturePowerCoordinator.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -397,6 +403,8 @@
 				A4BF9B8B2EFCF160003DD09D /* PreviewContainerView.swift in Sources */,
 				FB000001000000000001 /* IOSDeviceStateMapper.swift in Sources */,
 				FB000001000000000005 /* FBDeviceControlService.swift in Sources */,
+				7C9E7C8622DBA7F73CEC7DF7 /* SystemSleepBlocker.swift in Sources */,
+				A2771ABD034F7D36AB14C564 /* CapturePowerCoordinator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

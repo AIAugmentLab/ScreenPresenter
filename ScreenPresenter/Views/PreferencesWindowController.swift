@@ -671,7 +671,6 @@ final class PreferencesViewController: NSViewController {
         let labels = [
             L10n.prefs.tab.general,
             L10n.prefs.tab.capture,
-            L10n.prefs.tab.scrcpy,
             L10n.prefs.tab.permissions,
         ]
         segmentedControl.segmentCount = labels.count
@@ -694,7 +693,6 @@ final class PreferencesViewController: NSViewController {
         tabViews = [
             createGeneralView(),
             createCaptureView(),
-            createScrcpyView(),
             createPermissionsView(),
         ]
 
@@ -810,6 +808,31 @@ final class PreferencesViewController: NSViewController {
         ))
 
         addSettingsGroup(appearanceGroup, to: stackView)
+
+        // 电源管理设置组
+        let powerGroup = createSettingsGroup(title: L10n.prefs.power.sectionTitle, icon: "moon.zzz")
+
+        addGroupRow(powerGroup, createCheckboxRow(
+            label: L10n.prefs.power.preventAutoLock,
+            isOn: UserPreferences.shared.preventAutoLockDuringCapture,
+            action: #selector(preventAutoLockChanged(_:))
+        ))
+        // 添加帮助文本（与帧率备注样式一致）
+        let powerNote = NSTextField(labelWithString: L10n.prefs.power.preventAutoLockHelp)
+        powerNote.font = NSFont.systemFont(ofSize: 11)
+        powerNote.textColor = .secondaryLabelColor
+        let powerNoteContainer = PaddingView(
+            contentView: powerNote,
+            insets: NSEdgeInsets(
+                top: 0,
+                left: 0,
+                bottom: LayoutMetrics.rowVerticalPadding * 1.5,
+                right: 0
+            )
+        )
+        addGroupRow(powerGroup, powerNoteContainer, addDivider: false)
+
+        addSettingsGroup(powerGroup, to: stackView)
 
         // 布局设置组
         let layoutGroup = createSettingsGroup(title: L10n.prefs.section.layout, icon: "rectangle.split.2x1")
@@ -946,19 +969,11 @@ final class PreferencesViewController: NSViewController {
         addGroupRow(frameRateGroup, noteContainer, addDivider: false)
         addSettingsGroup(frameRateGroup, to: stackView)
 
-        setupScrollViewLayout(scrollView: scrollView, contentView: stackView)
-        return scrollView
-    }
+        // Android (Scrcpy) 设置组
+        let androidGroup = createSettingsGroup(title: L10n.prefs.section.android, icon: "apps.iphone")
 
-    // MARK: - Scrcpy 设置
-
-    private func createScrcpyView() -> NSView {
-        let scrollView = createScrollView()
-        let stackView = createVerticalStack()
-
-        // 视频设置组
-        let videoGroup = createSettingsGroup(title: L10n.prefs.section.video, icon: "video")
-        addGroupRow(videoGroup, createLabeledRow(label: L10n.prefs.scrcpyPref.bitrate) {
+        // 码率设置
+        addGroupRow(androidGroup, createLabeledRow(label: L10n.prefs.scrcpyPref.bitrate) {
             let popup = NSPopUpButton()
             popup.addItems(withTitles: [
                 L10n.prefs.scrcpyPref.mbps(4),
@@ -976,7 +991,9 @@ final class PreferencesViewController: NSViewController {
             popup.action = #selector(scrcpyBitrateChanged(_:))
             return popup
         })
-        addGroupRow(videoGroup, createLabeledRow(label: L10n.prefs.scrcpyPref.maxSize) {
+
+        // 最大分辨率
+        addGroupRow(androidGroup, createLabeledRow(label: L10n.prefs.scrcpyPref.maxSize) {
             let popup = NSPopUpButton()
             popup.addItems(withTitles: [
                 L10n.prefs.scrcpyPref.noLimit,
@@ -994,35 +1011,16 @@ final class PreferencesViewController: NSViewController {
             popup.action = #selector(scrcpyMaxSizeChanged(_:))
             return popup
         })
-        let videoNote = NSTextField(labelWithString: L10n.prefs.scrcpyPref.maxSizeNote)
-        videoNote.font = NSFont.systemFont(ofSize: 11)
-        videoNote.textColor = .secondaryLabelColor
-        let videoNoteContainer = PaddingView(
-            contentView: videoNote,
-            insets: NSEdgeInsets(
-                top: 0,
-                left: 0,
-                bottom: LayoutMetrics.rowVerticalPadding * 1.5,
-                right: 0
-            )
-        )
-        addGroupRow(videoGroup, videoNoteContainer, addDivider: false)
-        addSettingsGroup(videoGroup, to: stackView)
 
-        // 显示设置组
-        let displayGroup = createSettingsGroup(title: L10n.prefs.section.display, icon: "hand.tap")
-        addGroupRow(displayGroup, createCheckboxRow(
+        // 显示触摸点
+        addGroupRow(androidGroup, createCheckboxRow(
             label: L10n.prefs.scrcpyPref.showTouches,
             isOn: UserPreferences.shared.scrcpyShowTouches,
             action: #selector(scrcpyShowTouchesChanged(_:))
         ))
-        addSettingsGroup(displayGroup, to: stackView)
-
-        // 高级设置组
-        let advancedGroup = createSettingsGroup(title: L10n.prefs.section.advanced, icon: "gearshape.2")
 
         // 连接端口
-        addGroupRow(advancedGroup, createLabeledRow(label: L10n.prefs.scrcpyPref.port) {
+        addGroupRow(androidGroup, createLabeledRow(label: L10n.prefs.scrcpyPref.port) {
             let stack = StackContainerView()
             stack.axis = .horizontal
             stack.alignment = .centerY
@@ -1049,7 +1047,7 @@ final class PreferencesViewController: NSViewController {
         })
 
         // 视频编解码器
-        addGroupRow(advancedGroup, createLabeledRow(label: L10n.prefs.scrcpyPref.codec) {
+        addGroupRow(androidGroup, createLabeledRow(label: L10n.prefs.scrcpyPref.codec) {
             let popup = NSPopUpButton()
             for codec in ScrcpyCodecType.allCases {
                 popup.addItem(withTitle: codec.displayName)
@@ -1061,46 +1059,21 @@ final class PreferencesViewController: NSViewController {
             return popup
         })
 
-        // 高级配置说明（添加分割线，增加顶部间距）
-        let advancedNote = NSTextField(labelWithString: L10n.prefs.scrcpyPref.advancedNote)
-        advancedNote.font = NSFont.systemFont(ofSize: 11)
-        advancedNote.textColor = .secondaryLabelColor
-        let advancedNoteContainer = PaddingView(
-            contentView: advancedNote,
+        // Android 配置说明
+        let androidNote = NSTextField(labelWithString: L10n.prefs.scrcpyPref.maxSizeNote)
+        androidNote.font = NSFont.systemFont(ofSize: 11)
+        androidNote.textColor = .secondaryLabelColor
+        let androidNoteContainer = PaddingView(
+            contentView: androidNote,
             insets: NSEdgeInsets(
-                top: LayoutMetrics.rowVerticalPadding,
-                left: 0,
-                bottom: 0,
-                right: 0
-            )
-        )
-        addGroupRow(advancedGroup, advancedNoteContainer, addDivider: true)
-
-        // GitHub 链接按钮（按文本宽度显示，增加与上方的间距）
-        let linkButton = NSButton(
-            title: L10n.prefs.scrcpyPref.github,
-            target: self,
-            action: #selector(openScrcpyGitHub)
-        )
-        linkButton.bezelStyle = .inline
-        linkButton.setContentHuggingPriority(.defaultHigh, for: .horizontal)
-        linkButton.setContentCompressionResistancePriority(.required, for: .horizontal)
-        // 使用 HStack 让按钮左对齐而不是撑满
-        let linkStack = NSStackView(views: [linkButton])
-        linkStack.orientation = .horizontal
-        linkStack.alignment = .leading
-        linkStack.distribution = .fill
-        let linkContainer = PaddingView(
-            contentView: linkStack,
-            insets: NSEdgeInsets(
-                top: LayoutMetrics.rowVerticalPadding,
+                top: 0,
                 left: 0,
                 bottom: LayoutMetrics.rowVerticalPadding * 1.5,
                 right: 0
             )
         )
-        addGroupRow(advancedGroup, linkContainer, addDivider: false)
-        addSettingsGroup(advancedGroup, to: stackView)
+        addGroupRow(androidGroup, androidNoteContainer, addDivider: false)
+        addSettingsGroup(androidGroup, to: stackView)
 
         setupScrollViewLayout(scrollView: scrollView, contentView: stackView)
         return scrollView
@@ -1337,15 +1310,42 @@ final class PreferencesViewController: NSViewController {
         label: String,
         isOn: Bool,
         action: Selector,
+        helpText: String? = nil,
         configure: ((NSButton) -> Void)? = nil
     ) -> NSView {
-        createLabeledRow(label: label) {
-            let checkbox = NSButton(checkboxWithTitle: "", target: self, action: action)
-            checkbox.state = isOn ? .on : .off
-            checkbox.setContentHuggingPriority(.required, for: .horizontal)
-            checkbox.setContentCompressionResistancePriority(.required, for: .horizontal)
-            configure?(checkbox)
-            return checkbox
+        if let helpText = helpText {
+            // 带帮助文本的版本
+            let container = StackContainerView()
+            container.axis = .vertical
+            container.alignment = .leading
+            container.spacing = 4
+
+            let row = createLabeledRow(label: label) {
+                let checkbox = NSButton(checkboxWithTitle: "", target: self, action: action)
+                checkbox.state = isOn ? .on : .off
+                checkbox.setContentHuggingPriority(.required, for: .horizontal)
+                checkbox.setContentCompressionResistancePriority(.required, for: .horizontal)
+                configure?(checkbox)
+                return checkbox
+            }
+            container.addArrangedSubview(row)
+
+            let helpLabel = NSTextField(wrappingLabelWithString: helpText)
+            helpLabel.font = NSFont.systemFont(ofSize: 11)
+            helpLabel.textColor = .secondaryLabelColor
+            container.addArrangedSubview(helpLabel)
+
+            return container
+        } else {
+            // 原有版本
+            return createLabeledRow(label: label) {
+                let checkbox = NSButton(checkboxWithTitle: "", target: self, action: action)
+                checkbox.state = isOn ? .on : .off
+                checkbox.setContentHuggingPriority(.required, for: .horizontal)
+                checkbox.setContentCompressionResistancePriority(.required, for: .horizontal)
+                configure?(checkbox)
+                return checkbox
+            }
         }
     }
 
@@ -1888,6 +1888,10 @@ final class PreferencesViewController: NSViewController {
         UserPreferences.shared.showDeviceBezel = sender.state == .on
     }
 
+    @objc private func preventAutoLockChanged(_ sender: NSButton) {
+        UserPreferences.shared.preventAutoLockDuringCapture = sender.state == .on
+    }
+
     @objc private func layoutModeChanged(_ sender: NSSegmentedControl) {
         let index = sender.selectedSegment
         guard index >= 0, index < PreviewLayoutMode.allCases.count else { return }
@@ -2229,4 +2233,5 @@ extension Notification.Name {
     static let backgroundColorDidChange = Notification.Name("backgroundColorDidChange")
     static let deviceBezelVisibilityDidChange = Notification.Name("deviceBezelVisibilityDidChange")
     static let layoutModeDidChange = Notification.Name("layoutModeDidChange")
+    static let preventAutoLockSettingDidChange = Notification.Name("preventAutoLockSettingDidChange")
 }

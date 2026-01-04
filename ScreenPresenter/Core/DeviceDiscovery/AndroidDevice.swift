@@ -102,9 +102,15 @@ struct AndroidDevice: Identifiable, Equatable, Hashable {
     /// SDK 版本（ro.build.version.sdk，如 31）
     var sdkVersion: String?
 
+    /// 定制系统名称（如 ColorOS, MIUI, One UI 等）
+    var customOsName: String?
+
+    /// 定制系统版本（如 15, 14.0.1 等）
+    var customOsVersion: String?
+
     var id: String { serial }
 
-    /// 显示名称（优先使用市场名称）
+    /// 显示名称（标题）：优先使用市场名称
     var displayName: String {
         // 优先使用市场名称
         if let marketName, !marketName.isEmpty {
@@ -122,14 +128,23 @@ struct AndroidDevice: Identifiable, Equatable, Hashable {
         return serial
     }
 
-    /// 型号显示名称（用于副标题）
-    var displayModelName: String? {
-        model?.replacingOccurrences(of: "_", with: " ")
-    }
-
-    /// 系统版本显示（如 Android 12）
+    /// 系统版本显示（如 "ColorOS 15(Android 15 · SDK 35)" 或 "Android 15(SDK 35)" 或 "Android 15"）
     var displaySystemVersion: String? {
         guard let androidVersion else { return nil }
+
+        // 如果有定制系统信息，显示 "CustomOS version(Android version · SDK xx)"
+        if let customOsName, !customOsName.isEmpty {
+            let customVersion = (customOsVersion != nil && !customOsVersion!.isEmpty) ? " \(customOsVersion!)" : ""
+            if let sdkVersion, !sdkVersion.isEmpty {
+                return "\(customOsName)\(customVersion)(Android \(androidVersion) · SDK \(sdkVersion))"
+            }
+            return "\(customOsName)\(customVersion)(Android \(androidVersion))"
+        }
+
+        // 没有定制系统，显示 "Android version(SDK xx)" 或 "Android version"
+        if let sdkVersion, !sdkVersion.isEmpty {
+            return "Android \(androidVersion)(SDK \(sdkVersion))"
+        }
         return "Android \(androidVersion)"
     }
 

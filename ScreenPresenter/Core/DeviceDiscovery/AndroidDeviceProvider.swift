@@ -140,15 +140,71 @@ final class AndroidDeviceProvider: ObservableObject {
         enriched.androidVersion = await androidVersion
         enriched.sdkVersion = await sdkVersion
 
+        // 获取定制系统信息
+        await enrichCustomOsInfo(&enriched)
+
         // 某些设备没有 marketname，尝试其他属性
-        if enriched.marketName == nil || enriched.marketName?.isEmpty == true {
-            enriched.marketName = await getDeviceProperty(device.serial, property: "ro.product.vendor.marketname")
+        // 注意：只有当值看起来像有效的市场名称时才使用（包含空格或长度超过型号）
+        if !isValidMarketName(enriched.marketName) {
+            let vendorMarketName = await getDeviceProperty(device.serial, property: "ro.product.vendor.marketname")
+            if isValidMarketName(vendorMarketName) {
+                enriched.marketName = vendorMarketName
+            }
         }
-        if enriched.marketName == nil || enriched.marketName?.isEmpty == true {
-            enriched.marketName = await getDeviceProperty(device.serial, property: "ro.config.marketing_name")
+        if !isValidMarketName(enriched.marketName) {
+            let configMarketingName = await getDeviceProperty(device.serial, property: "ro.config.marketing_name")
+            if isValidMarketName(configMarketingName) {
+                enriched.marketName = configMarketingName
+            }
+        }
+        // OnePlus 等设备使用 ro.product.odm.marketname
+        if !isValidMarketName(enriched.marketName) {
+            let odmMarketName = await getDeviceProperty(device.serial, property: "ro.product.odm.marketname")
+            if isValidMarketName(odmMarketName) {
+                enriched.marketName = odmMarketName
+            }
+        }
+        // 尝试 ro.display.series（某些 OnePlus 设备使用）
+        if !isValidMarketName(enriched.marketName) {
+            let displaySeries = await getDeviceProperty(device.serial, property: "ro.display.series")
+            if isValidMarketName(displaySeries) {
+                enriched.marketName = displaySeries
+            }
+        }
+        // 尝试 ro.vendor.oplus.market.name（OPLUS/OnePlus 设备）
+        if !isValidMarketName(enriched.marketName) {
+            let oplusMarketName = await getDeviceProperty(device.serial, property: "ro.vendor.oplus.market.name")
+            if isValidMarketName(oplusMarketName) {
+                enriched.marketName = oplusMarketName
+            }
+        }
+        // 尝试 ro.oplus.market.name
+        if !isValidMarketName(enriched.marketName) {
+            let oplusMarketName2 = await getDeviceProperty(device.serial, property: "ro.oplus.market.name")
+            if isValidMarketName(oplusMarketName2) {
+                enriched.marketName = oplusMarketName2
+            }
+        }
+
+        // 如果还是没有有效的市场名称，清空它让 displayName 使用 brand + model
+        if !isValidMarketName(enriched.marketName) {
+            enriched.marketName = nil
         }
 
         return enriched
+    }
+
+    /// 检查是否是有效的市场名称
+    /// 有效的市场名称通常包含空格（如 "OnePlus 13T"）或者长度大于典型型号
+    private func isValidMarketName(_ name: String?) -> Bool {
+        guard let name = name, !name.isEmpty else { return false }
+        // 包含空格的名称通常是有效的市场名称
+        if name.contains(" ") { return true }
+        // 纯数字或型号代码通常不是有效的市场名称
+        let alphanumericOnly = name.replacingOccurrences(of: "[^a-zA-Z0-9]", with: "", options: .regularExpression)
+        // 如果全是大写字母和数字的组合（如 PKX110, SM_G998B），可能是型号
+        let isLikelyModelCode = alphanumericOnly.uppercased() == alphanumericOnly && alphanumericOnly.count <= 10
+        return !isLikelyModelCode
     }
 
     /// 启动 adb 服务
@@ -234,5 +290,110 @@ extension AndroidDeviceProvider {
     /// 获取 Android 版本
     func getAndroidVersion(_ serial: String) async -> String? {
         await getDeviceProperty(serial, property: "ro.build.version.release")
+    }
+
+    /// 获取定制系统信息
+    /// 支持：ColorOS, MIUI, HyperOS, One UI, OxygenOS, Flyme, EMUI, MagicOS 等
+    private func enrichCustomOsInfo(_ device: inout AndroidDevice) async {
+        let serial = device.serial
+
+        // ColorOS (OnePlus/OPPO/Realme)
+        if let colorOsVersion = await getDeviceProperty(serial, property: "ro.oplus.version") {
+            device.customOsName = "ColorOS"
+            device.customOsVersion = colorOsVersion
+            return
+        }
+        if let colorOsVersion = await getDeviceProperty(serial, property: "ro.build.version.opporom") {
+            device.customOsName = "ColorOS"
+            device.customOsVersion = colorOsVersion
+            return
+        }
+
+        // MIUI/HyperOS (Xiaomi/Redmi/POCO)
+        if let miuiVersion = await getDeviceProperty(serial, property: "ro.miui.ui.version.name") {
+            // 检查是否是 HyperOS
+            if let hyperOsVersion = await getDeviceProperty(serial, property: "ro.mi.os.version.name"),
+               !hyperOsVersion.isEmpty
+            {
+                device.customOsName = "HyperOS"
+                device.customOsVersion = hyperOsVersion
+            } else {
+                device.customOsName = "MIUI"
+                device.customOsVersion = miuiVersion
+            }
+            return
+        }
+
+        // One UI (Samsung)
+        if let oneUiVersion = await getDeviceProperty(serial, property: "ro.build.version.oneui") {
+            // One UI 版本通常是数字格式，如 50100 表示 5.1
+            let formatted = formatOneUiVersion(oneUiVersion)
+            device.customOsName = "One UI"
+            device.customOsVersion = formatted
+            return
+        }
+
+        // OxygenOS (OnePlus 海外版)
+        if let oxygenVersion = await getDeviceProperty(serial, property: "ro.oxygen.version") {
+            device.customOsName = "OxygenOS"
+            device.customOsVersion = oxygenVersion
+            return
+        }
+
+        // Flyme (Meizu)
+        if let flymeVersion = await getDeviceProperty(serial, property: "ro.build.display.id") {
+            if flymeVersion.lowercased().contains("flyme") {
+                device.customOsName = "Flyme"
+                // 提取版本号
+                if let match = flymeVersion.range(of: #"\d+(\.\d+)*"#, options: .regularExpression) {
+                    device.customOsVersion = String(flymeVersion[match])
+                }
+                return
+            }
+        }
+
+        // EMUI/HarmonyOS (Huawei)
+        if let emuiVersion = await getDeviceProperty(serial, property: "ro.build.version.emui") {
+            // 检查是否是 HarmonyOS
+            if let harmonyVersion = await getDeviceProperty(serial, property: "hw_sc.build.os.version"),
+               !harmonyVersion.isEmpty
+            {
+                device.customOsName = "HarmonyOS"
+                device.customOsVersion = harmonyVersion
+            } else {
+                device.customOsName = "EMUI"
+                // EMUI 版本格式通常是 EmotionUI_X.X.X
+                if let match = emuiVersion.range(of: #"\d+(\.\d+)*"#, options: .regularExpression) {
+                    device.customOsVersion = String(emuiVersion[match])
+                }
+            }
+            return
+        }
+
+        // MagicOS (Honor)
+        if let magicVersion = await getDeviceProperty(serial, property: "ro.build.version.magic") {
+            device.customOsName = "MagicOS"
+            device.customOsVersion = magicVersion
+            return
+        }
+
+        // Vivo OriginOS
+        if let originVersion = await getDeviceProperty(serial, property: "ro.vivo.os.version") {
+            device.customOsName = "OriginOS"
+            device.customOsVersion = originVersion
+            return
+        }
+    }
+
+    /// 格式化 One UI 版本号
+    /// 例如：50100 -> 5.1, 40000 -> 4.0
+    private func formatOneUiVersion(_ version: String) -> String {
+        guard let versionNum = Int(version) else { return version }
+        let major = versionNum / 10000
+        let minor = (versionNum % 10000) / 100
+        if minor == 0 {
+            return "\(major)"
+        }
+        return "\(major).\(minor)"
     }
 }

@@ -6,7 +6,7 @@
 */
 
 // MARK: - App
-"app.name" = "演示台";
+"app.name" = "屏幕演示台";
 "app.description" = "macOS 设备投屏工具\n同时展示 iOS 和 Android 设备屏幕";
 
 // MARK: - Common
@@ -42,7 +42,7 @@
 
 // MARK: - Window
 "window.preferences" = "偏好设置";
-"window.main" = "演示台";
+"window.main" = "屏幕演示台";
 
 // MARK: - Device Status
 "device.connected" = "已连接";
@@ -98,6 +98,7 @@
 "prefs.section.layout" = "布局";
 "prefs.section.connection" = "连接";
 "prefs.section.frameRate" = "帧率";
+"prefs.section.android" = "Android (Scrcpy)";
 "prefs.section.video" = "视频";
 "prefs.section.display" = "显示";
 "prefs.section.advanced" = "高级";
@@ -116,6 +117,11 @@
 // MARK: - Preferences - Appearance
 "prefs.appearance.backgroundOpacity" = "背景透明度";
 "prefs.appearance.showDeviceBezel" = "显示设备边框";
+
+// MARK: - Preferences - Power
+"prefs.power.sectionTitle" = "电源管理";
+"prefs.power.preventAutoLock" = "捕获期间禁止自动锁屏";
+"prefs.power.preventAutoLockHelp" = "仅阻止系统自动休眠/锁屏，不影响手动锁屏";
 
 // MARK: - Preferences - Layout
 "prefs.layout.devicePosition" = "默认设备布局";
@@ -218,6 +224,10 @@
 "toolbar.hideBezel" = "隐藏边框";
 "toolbar.layoutMode" = "布局模式";
 "toolbar.layoutMode.tooltip" = "切换显示布局模式";
+"toolbar.preventSleep" = "防休眠";
+"toolbar.preventSleep.tooltip" = "捕获期间阻止系统自动休眠/锁屏";
+"toolbar.preventSleep.on" = "防休眠已启用";
+"toolbar.preventSleep.off" = "防休眠已禁用";
 
 // MARK: - Permission
 "permission.unknown" = "未知";

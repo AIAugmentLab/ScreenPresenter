@@ -294,6 +294,11 @@ final class ScrcpyServerLauncher {
         }
         args.append("video_codec=\(configuration.videoCodec.rawValue)")
 
+        // 显示触摸点
+        if configuration.showTouches {
+            args.append("show_touches=true")
+        }
+
         AppLogger.process.info("[ScrcpyLauncher] 服务端参数: \(args.joined(separator: " "))")
         return args
     }

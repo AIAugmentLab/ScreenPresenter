@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowToolbar: NSToolbar?
     private var refreshToolbarItem: NSToolbarItem?
     private var toggleBezelToolbarItem: NSToolbarItem?
+    private var preventSleepToolbarItem: NSToolbarItem?
     private var layoutModeToolbarItem: NSToolbarItem?
     private var layoutModeSegmentedControl: NSSegmentedControl?
     private var isRefreshing: Bool = false
@@ -49,6 +50,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 监听语言变更
         setupLanguageObserver()
 
+        // 启动捕获电源协调器（管理防休眠）
+        CapturePowerCoordinator.shared.start()
+
         // 初始化应用状态
         Task {
             AppLogger.app.info("开始异步初始化应用状态...")
@@ -72,12 +76,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: .deviceBezelVisibilityDidChange,
             object: nil
         )
+
+        // 监听防休眠设置变化
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePreventSleepSettingChange),
+            name: .preventAutoLockSettingDidChange,
+            object: nil
+        )
     }
 
     @objc private func handleBezelVisibilityChange() {
         // 更新工具栏按钮图标
         if let item = toggleBezelToolbarItem {
             updateBezelToolbarItemImage(item)
+        }
+    }
+
+    @objc private func handlePreventSleepSettingChange() {
+        // 更新工具栏按钮图标
+        if let item = preventSleepToolbarItem {
+            updatePreventSleepToolbarItemImage(item)
         }
     }
 
@@ -102,6 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.toolbar = nil
         refreshToolbarItem = nil
         toggleBezelToolbarItem = nil
+        preventSleepToolbarItem = nil
         layoutModeToolbarItem = nil
         layoutModeSegmentedControl = nil
 
@@ -128,6 +148,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         AppLogger.app.info("应用即将退出")
+
+        // 停止捕获电源协调器（释放防休眠 assertion）
+        CapturePowerCoordinator.shared.stop()
 
         // 清理资源
         Task {
@@ -363,6 +386,14 @@ extension AppDelegate {
         }
     }
 
+    @IBAction func togglePreventSleep(_ sender: Any?) {
+        UserPreferences.shared.preventAutoLockDuringCapture.toggle()
+        // 更新工具栏按钮图标
+        if let item = preventSleepToolbarItem {
+            updatePreventSleepToolbarItemImage(item)
+        }
+    }
+
     @objc private func layoutModeChanged(_ sender: NSSegmentedControl) {
         let selectedIndex = sender.selectedSegment
         guard selectedIndex >= 0, selectedIndex < PreviewLayoutMode.allCases.count else { return }
@@ -394,15 +425,19 @@ extension AppDelegate: NSToolbarDelegate {
         static let layoutMode = NSToolbarItem.Identifier("layoutMode")
         static let refresh = NSToolbarItem.Identifier("refresh")
         static let toggleBezel = NSToolbarItem.Identifier("toggleBezel")
+        static let preventSleep = NSToolbarItem.Identifier("preventSleep")
         static let preferences = NSToolbarItem.Identifier("preferences")
         static let flexibleSpace = NSToolbarItem.Identifier.flexibleSpace
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [
+            .flexibleSpace,
             ToolbarItemIdentifier.layoutMode,
             .flexibleSpace,
             ToolbarItemIdentifier.refresh,
+            .flexibleSpace,
+            ToolbarItemIdentifier.preventSleep,
             ToolbarItemIdentifier.toggleBezel,
             ToolbarItemIdentifier.preferences,
         ]
@@ -410,9 +445,11 @@ extension AppDelegate: NSToolbarDelegate {
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [
+            ToolbarItemIdentifier.refresh,
             ToolbarItemIdentifier.layoutMode,
             .flexibleSpace,
-            ToolbarItemIdentifier.refresh,
+            .space,
+            ToolbarItemIdentifier.preventSleep,
             ToolbarItemIdentifier.toggleBezel,
             ToolbarItemIdentifier.preferences,
         ]
@@ -485,6 +522,17 @@ extension AppDelegate: NSToolbarDelegate {
             toggleBezelToolbarItem = item
             return item
 
+        case ToolbarItemIdentifier.preventSleep:
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            item.label = L10n.toolbar.preventSleep
+            item.paletteLabel = L10n.toolbar.preventSleep
+            item.toolTip = L10n.toolbar.preventSleepTooltip
+            updatePreventSleepToolbarItemImage(item)
+            item.target = self
+            item.action = #selector(togglePreventSleep(_:))
+            preventSleepToolbarItem = item
+            return item
+
         case ToolbarItemIdentifier.preferences:
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             item.label = L10n.toolbar.preferences
@@ -507,6 +555,16 @@ extension AppDelegate: NSToolbarDelegate {
         item.image = NSImage(
             systemSymbolName: symbolName,
             accessibilityDescription: showBezel ? L10n.toolbar.hideBezel : L10n.toolbar.showBezel
+        )
+    }
+
+    private func updatePreventSleepToolbarItemImage(_ item: NSToolbarItem) {
+        let enabled = UserPreferences.shared.preventAutoLockDuringCapture
+        // moon.zzz.fill = 阻止休眠（启用）；moon.zzz = 允许休眠（禁用）
+        let symbolName = enabled ? "moon.zzz.fill" : "moon.zzz"
+        item.image = NSImage(
+            systemSymbolName: symbolName,
+            accessibilityDescription: enabled ? L10n.toolbar.preventSleepOn : L10n.toolbar.preventSleepOff
         )
     }
 }
