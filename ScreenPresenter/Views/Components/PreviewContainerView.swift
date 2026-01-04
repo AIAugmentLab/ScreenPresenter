@@ -162,13 +162,17 @@ final class PreviewContainerView: NSView {
     private func updateSwapButtonStyle() {
         guard let layer = swapButton.layer else { return }
 
-        // 根据全屏状态确定图标颜色
-        let iconColor: NSColor = isFullScreen ? .white : NSColor(white: 0.3, alpha: 1.0)
+        // 检测是否需要使用暗色样式（全屏或系统深色模式）
+        let isDarkAppearance = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let useDarkStyle = isFullScreen || isDarkAppearance
+
+        // 根据样式确定图标颜色
+        let iconColor: NSColor = useDarkStyle ? .white : NSColor(white: 0.3, alpha: 1.0)
         let swapIconConfig = NSImage.SymbolConfiguration(pointSize: 16, weight: .regular)
             .applying(.init(paletteColors: [iconColor]))
 
-        if isFullScreen {
-            // 全屏时使用暗色样式
+        if useDarkStyle {
+            // 全屏或深色模式时使用暗色样式
             layer.backgroundColor = NSColor.white.withAlphaComponent(0.2).cgColor
             layer.borderColor = NSColor.white.withAlphaComponent(0.4).cgColor
             layer.borderWidth = 1
@@ -177,7 +181,7 @@ final class PreviewContainerView: NSView {
             layer.shadowOffset = CGSize(width: 0, height: -1)
             layer.shadowRadius = 4
         } else {
-            // 非全屏时使用浅色样式
+            // 亮色模式时使用浅色样式
             layer.backgroundColor = NSColor(white: 0.95, alpha: 1.0).cgColor
             layer.borderColor = NSColor(white: 0.8, alpha: 1.0).cgColor
             layer.borderWidth = 1
@@ -821,5 +825,11 @@ final class PreviewContainerView: NSView {
         if !isInitialLayout, !isAnimatingManualLayout {
             updatePanelFrames()
         }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        // 系统外观变化时更新交换按钮样式
+        updateSwapButtonStyle()
     }
 }

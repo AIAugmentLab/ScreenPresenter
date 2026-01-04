@@ -1137,15 +1137,6 @@ final class PreferencesViewController: NSViewController {
         ), addDivider: false)
         addSettingsGroup(iosPermGroup, to: stackView)
 
-        // Android 权限组
-        let androidPermGroup = createSettingsGroup(title: L10n.prefs.section.androidPermissions, icon: "apps.iphone")
-        addGroupRow(androidPermGroup, createPermissionRow(
-            name: L10n.permission.screenRecordingName,
-            description: L10n.permission.screenRecordingDesc,
-            permissionType: .screenRecording
-        ), addDivider: false)
-        addSettingsGroup(androidPermGroup, to: stackView)
-
         // 权限管理说明
         let permNoteLabel = NSTextField(wrappingLabelWithString: L10n.permission.revokeNote)
         permNoteLabel.font = NSFont.systemFont(ofSize: 11)
@@ -1820,7 +1811,6 @@ final class PreferencesViewController: NSViewController {
     }
 
     private enum PermissionType {
-        case screenRecording
         case camera
     }
 
@@ -1879,12 +1869,8 @@ final class PreferencesViewController: NSViewController {
         )
         openButton.bezelStyle = .rounded
         openButton.controlSize = .small
-        switch permissionType {
-        case .screenRecording:
-            openButton.tag = 0
-        case .camera:
-            openButton.tag = 1
-        }
+        // 摄像头权限按钮 tag
+        openButton.tag = 1
         rightStack.addArrangedSubview(openButton)
 
         // 撤销按钮（已授权时显示）
@@ -1896,22 +1882,13 @@ final class PreferencesViewController: NSViewController {
         revokeButton.bezelStyle = .rounded
         revokeButton.controlSize = .small
         revokeButton.isHidden = true
-        switch permissionType {
-        case .screenRecording:
-            revokeButton.tag = 10
-        case .camera:
-            revokeButton.tag = 11
-        }
+        // 摄像头权限撤销按钮 tag
+        revokeButton.tag = 11
         rightStack.addArrangedSubview(revokeButton)
 
         // 检查权限状态
         Task { @MainActor in
-            let granted: Bool = switch permissionType {
-            case .screenRecording:
-                checkScreenRecordingPermission()
-            case .camera:
-                checkCameraPermission()
-            }
+            let granted = checkCameraPermission()
 
             if granted {
                 statusIcon.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
@@ -1931,12 +1908,6 @@ final class PreferencesViewController: NSViewController {
         }
 
         return LabeledRowView(labelView: leftStack, control: rightStack)
-    }
-
-    private func checkScreenRecordingPermission() -> Bool {
-        // 检查屏幕录制权限
-        // macOS 10.15+ 使用 CGPreflightScreenCaptureAccess 准确检查权限状态
-        CGPreflightScreenCaptureAccess()
     }
 
     private func checkCameraPermission() -> Bool {
@@ -2100,38 +2071,17 @@ final class PreferencesViewController: NSViewController {
     }
 
     @objc private func openSystemPreferences(_ sender: NSButton) {
-        let urlString: String
-        switch sender.tag {
-        case 0:
-            // 打开系统偏好设置 - 隐私 - 屏幕录制
-            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-        case 1:
-            // 打开系统偏好设置 - 隐私 - 摄像头
-            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
-        default:
-            return
-        }
+        // 打开系统偏好设置 - 隐私 - 摄像头
+        let urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
         if let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
         }
     }
 
     @objc private func revokePermission(_ sender: NSButton) {
-        let urlString: String
-        let alertMessage: String
-
-        switch sender.tag {
-        case 10:
-            // 屏幕录制权限
-            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-            alertMessage = L10n.permission.revokeScreenRecordingHint
-        case 11:
-            // 摄像头权限
-            urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
-            alertMessage = L10n.permission.revokeCameraHint
-        default:
-            return
-        }
+        // 摄像头权限
+        let urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
+        let alertMessage = L10n.permission.revokeCameraHint
 
         // 显示提示
         let alert = NSAlert()

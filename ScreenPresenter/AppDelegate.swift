@@ -141,17 +141,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 请求摄像头权限
     private func requestCameraPermission() {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
-        AppLogger.app.info("摄像头权限状态: \(status.rawValue) (0=未确定, 1=受限, 2=拒绝, 3=已授权)")
 
-        if status == .notDetermined {
-            AppLogger.app.info("请求摄像头权限...")
-            AVCaptureDevice.requestAccess(for: .video) { granted in
-                AppLogger.app.info("摄像头权限请求结果: \(granted ? "已授权" : "已拒绝")")
-            }
-        } else if status == .denied {
+        switch status {
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { _ in }
+        case .denied:
             AppLogger.app.warning("摄像头权限已被拒绝，请在系统设置中开启")
-        } else if status == .authorized {
-            AppLogger.app.info("摄像头权限已授权")
+        case .authorized, .restricted:
+            break
+        @unknown default:
+            break
         }
     }
 

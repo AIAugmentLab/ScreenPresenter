@@ -110,13 +110,10 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
     private func setupDiscoverySession() {
         // 检查相机权限
         let authStatus = AVCaptureDevice.authorizationStatus(for: .video)
-        AppLogger.device.info("相机权限状态: \(authStatus.rawValue) (0=未确定, 1=受限, 2=拒绝, 3=已授权)")
 
         if authStatus == .notDetermined {
             // 请求权限
-            AppLogger.device.info("请求相机权限...")
             AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
-                AppLogger.device.info("相机权限请求结果: \(granted ? "已授权" : "已拒绝")")
                 if granted {
                     Task { @MainActor in
                         self?.refreshDevices()
@@ -124,7 +121,7 @@ final class IOSDeviceProvider: NSObject, ObservableObject {
                 }
             }
         } else if authStatus == .denied || authStatus == .restricted {
-            AppLogger.device.error("相机权限被拒绝，无法发现 iOS 设备。请在系统偏好设置中授权。")
+            AppLogger.device.warning("相机权限被拒绝，无法发现 iOS 设备。请在系统偏好设置中授权。")
             lastError = "相机权限被拒绝"
         }
 
