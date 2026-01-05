@@ -260,11 +260,14 @@ final class ScrcpyServerLauncher {
         // scid 使用十六进制格式，8位，前面补0
         let scidHex = String(format: "%08x", scid)
 
+        // 音频参数
+        let audioArg = configuration.audioEnabled ? "audio=true" : "audio=false"
+
         var args: [String] = [
             scrcpyVersion,
             "scid=\(scidHex)",
             "log_level=debug", // 使用 debug 级别以获取更多诊断信息
-            "audio=false",
+            audioArg,
             "control=false",
             // 标准协议：发送 meta 和 frame header
             "send_device_meta=true",
@@ -273,6 +276,12 @@ final class ScrcpyServerLauncher {
             "send_codec_meta=true",
             "raw_stream=false",
         ]
+
+        // 音频编解码器配置（仅在启用音频时）
+        if configuration.audioEnabled {
+            args.append("audio_codec=\(configuration.audioCodec.rawValue)")
+            args.append("audio_bit_rate=\(configuration.audioBitRate)")
+        }
 
         // 根据连接模式设置 tunnel 参数
         switch connectionMode {

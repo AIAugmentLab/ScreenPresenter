@@ -232,25 +232,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         mainMenu.addItem(appMenuItem)
 
-        // 文件菜单
-        let fileMenu = NSMenu(title: L10n.menu.file)
-        let fileMenuItem = NSMenuItem()
-        fileMenuItem.submenu = fileMenu
+        // 设备菜单
+        let deviceMenu = NSMenu(title: L10n.menu.device)
+        let deviceMenuItem = NSMenuItem()
+        deviceMenuItem.submenu = deviceMenu
 
-        fileMenu.addItem(
+        deviceMenu.addItem(
             withTitle: L10n.menu.refreshDevices,
             action: #selector(refreshDevices(_:)),
             keyEquivalent: "r"
         )
-        fileMenu.addItem(NSMenuItem.separator())
-        let closeItem = fileMenu.addItem(
+        deviceMenu.addItem(NSMenuItem.separator())
+        let closeItem = deviceMenu.addItem(
             withTitle: L10n.menu.close,
             action: #selector(NSWindow.performClose(_:)),
             keyEquivalent: "w"
         )
         closeItem.target = nil
 
-        mainMenu.addItem(fileMenuItem)
+        mainMenu.addItem(deviceMenuItem)
 
         // 显示菜单
         let viewMenu = NSMenu(title: L10n.menu.view)

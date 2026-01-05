@@ -31,7 +31,7 @@
 "menu.hideOthers" = "隐藏其他";
 "menu.showAll" = "全部显示";
 "menu.quit" = "退出 ScreenPresenter";
-"menu.file" = "文件";
+"menu.device" = "设备";
 "menu.refreshDevices" = "刷新设备";
 "menu.close" = "关闭";
 "menu.window" = "窗口";
@@ -97,7 +97,9 @@
 "prefs.section.appearance" = "外观";
 "prefs.section.layout" = "布局";
 "prefs.section.frameRate" = "帧率";
+"prefs.section.audio" = "音频";
 "prefs.section.iosAudio" = "iOS 音频";
+"prefs.section.androidAudio" = "Android 音频";
 "prefs.section.android" = "Android (Scrcpy)";
 "prefs.section.video" = "视频";
 "prefs.section.display" = "显示";
@@ -111,6 +113,8 @@
 "prefs.audio.enableCapture" = "启用音频捕获";
 "prefs.audio.volume" = "音量";
 "prefs.audio.iosNote" = "音频捕获需要通过 USB 连接 iOS 设备";
+"prefs.audio.androidNote" = "需要 Android 11 或更高版本。更改将在下次捕获时生效。";
+"prefs.audio.codec" = "音频编解码器";
 
 // MARK: - Preferences - General
 "prefs.general.displaySettings" = "显示设置";
@@ -153,7 +157,7 @@
 "prefs.scrcpy.noLimit" = "不限制";
 "prefs.scrcpy.pixels" = "%d 像素";
 "prefs.scrcpy.mbps" = "%d Mbps";
-"prefs.scrcpy.port" = "连接端口";
+"prefs.scrcpy.portRange" = "端口范围";
 "prefs.scrcpy.codec" = "视频编解码器";
 
 // MARK: - Preferences - Toolchain

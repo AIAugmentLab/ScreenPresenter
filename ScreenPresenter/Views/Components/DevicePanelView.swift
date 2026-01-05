@@ -289,14 +289,26 @@ final class DevicePanelView: NSView {
         }
 
         // 音频控制回调
-        captureInfoView.onAudioToggle = { enabled in
-            // 更新 iOS 设备源的音频状态
-            AppState.shared.iosDeviceSource?.isAudioEnabled = enabled
+        captureInfoView.onAudioToggle = { [weak self] enabled in
+            guard let self else { return }
+            // 根据当前平台更新对应设备源的音频状态
+            if self.currentPlatform == .ios {
+                AppState.shared.iosDeviceSource?.isAudioEnabled = enabled
+            } else if self.currentPlatform == .android {
+                // audioEnabled 属性会自动更新 UserPreferences 和 audioPlayer 的静音状态
+                AppState.shared.androidDeviceSource?.audioEnabled = enabled
+            }
         }
 
-        captureInfoView.onVolumeChange = { volume in
-            // 更新 iOS 设备源的音量
-            AppState.shared.iosDeviceSource?.audioVolume = volume
+        captureInfoView.onVolumeChange = { [weak self] volume in
+            guard let self else { return }
+            // 根据当前平台更新对应设备源的音量
+            if self.currentPlatform == .ios {
+                AppState.shared.iosDeviceSource?.audioVolume = volume
+            } else if self.currentPlatform == .android {
+                // audioVolume 属性会自动更新 UserPreferences 和 audioPlayer 的音量
+                AppState.shared.androidDeviceSource?.audioVolume = volume
+            }
         }
     }
 

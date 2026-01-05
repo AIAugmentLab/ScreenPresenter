@@ -39,11 +39,17 @@ final class ScrcpySocketAcceptor {
     /// 连接模式
     private let connectionMode: ScrcpyConnectionMode
 
+    /// 是否启用音频
+    private let audioEnabled: Bool
+
     /// NW Listener（reverse 模式使用）
     private var listener: NWListener?
 
     /// NW Connection（视频流连接）
     private var videoConnection: NWConnection?
+
+    /// NW Connection（音频流连接）
+    private var audioConnection: NWConnection?
 
     /// 连接队列
     private let queue = DispatchQueue(label: "com.screenPresenter.scrcpy.socket", qos: .userInteractive)
@@ -57,8 +63,11 @@ final class ScrcpySocketAcceptor {
     /// 状态变更回调
     var onStateChange: ((ScrcpySocketState) -> Void)?
 
-    /// 数据接收回调
+    /// 视频数据接收回调
     var onDataReceived: ((Data) -> Void)?
+
+    /// 音频数据接收回调
+    var onAudioDataReceived: ((Data) -> Void)?
 
     // MARK: - 初始化
 
@@ -66,11 +75,13 @@ final class ScrcpySocketAcceptor {
     /// - Parameters:
     ///   - port: 监听/连接端口
     ///   - connectionMode: 连接模式
-    init(port: Int, connectionMode: ScrcpyConnectionMode) {
+    ///   - audioEnabled: 是否启用音频
+    init(port: Int, connectionMode: ScrcpyConnectionMode, audioEnabled: Bool = false) {
         self.port = port
         self.connectionMode = connectionMode
+        self.audioEnabled = audioEnabled
 
-        AppLogger.connection.info("[SocketAcceptor] 初始化，端口: \(port), 模式: \(connectionMode)")
+        AppLogger.connection.info("[SocketAcceptor] 初始化，端口: \(port), 模式: \(connectionMode), 音频: \(audioEnabled)")
     }
 
     deinit {
@@ -101,9 +112,13 @@ final class ScrcpySocketAcceptor {
         listener?.cancel()
         listener = nil
 
-        // 关闭连接
+        // 关闭视频连接
         videoConnection?.cancel()
         videoConnection = nil
+
+        // 关闭音频连接
+        audioConnection?.cancel()
+        audioConnection = nil
 
         acceptedConnectionCount = 0
         updateState(.disconnected)
@@ -208,11 +223,17 @@ final class ScrcpySocketAcceptor {
 
         // 第一个连接是视频流
         if acceptedConnectionCount == 1 {
+            AppLogger.connection.info("[SocketAcceptor] 接收视频连接 #\(acceptedConnectionCount)")
             videoConnection = connection
             setupVideoConnection(connection)
+        } else if acceptedConnectionCount == 2, audioEnabled {
+            // 第二个连接是音频流（如果启用）
+            AppLogger.connection.info("[SocketAcceptor] 接收音频连接 #\(acceptedConnectionCount)")
+            audioConnection = connection
+            setupAudioConnection(connection)
         } else {
-            // 后续连接（control/audio）忽略但需要接受以避免服务端阻塞
-            AppLogger.connection.info("[SocketAcceptor] 忽略连接 #\(acceptedConnectionCount)（非视频流）")
+            // 后续连接（control）忽略但需要接受以避免服务端阻塞
+            AppLogger.connection.info("[SocketAcceptor] 忽略连接 #\(acceptedConnectionCount)")
             connection.cancel()
         }
     }
@@ -220,21 +241,54 @@ final class ScrcpySocketAcceptor {
     // MARK: - 私有方法 - Forward 模式
 
     /// 连接到服务器（forward 模式）
+    /// scrcpy 协议要求按顺序建立多个 TCP 连接：
+    /// 1. 视频流连接（第一个）
+    /// 2. 音频流连接（第二个，如果启用音频）
+    /// 3. 控制流连接（第三个，如果启用控制）
     private func connectToServer() async throws {
-        AppLogger.connection.info("[SocketAcceptor] 连接到 localhost:\(port)")
+        AppLogger.connection.info("[SocketAcceptor] 连接到 localhost:\(port) (forward 模式)")
 
         updateState(.connecting)
 
-        // 创建连接
         let host = NWEndpoint.Host("127.0.0.1")
         guard let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
             throw ScrcpySocketError.invalidPort(port)
         }
 
-        let connection = NWConnection(host: host, port: nwPort, using: .tcp)
-        videoConnection = connection
+        // 1. 第一个连接：视频流
+        AppLogger.connection.info("[SocketAcceptor] 创建视频连接 #1...")
+        videoConnection = try await createForwardConnection(host: host, port: nwPort, name: "video")
 
-        // 使用 continuation 等待连接建立
+        // 2. 第二个连接：音频流（如果启用）
+        if audioEnabled {
+            AppLogger.connection.info("[SocketAcceptor] 创建音频连接 #2...")
+            audioConnection = try await createForwardConnection(host: host, port: nwPort, name: "audio")
+        }
+
+        // 3. 第三个连接：控制流（当前未使用，但预留接口）
+        // 如果后续需要启用控制功能，在此添加：
+        // controlConnection = try await createForwardConnection(host: host, port: nwPort, name: "control")
+
+        updateState(.connected)
+        AppLogger.connection.info("[SocketAcceptor] ✅ 所有 forward 连接已建立 (视频\(audioEnabled ? "+音频" : ""))")
+
+        // 连接成功后开始接收数据
+        startReceiving()
+    }
+
+    /// 创建单个 forward 连接
+    /// - Parameters:
+    ///   - host: 主机地址
+    ///   - port: 端口
+    ///   - name: 连接名称（用于日志）
+    /// - Returns: 已建立的 NWConnection
+    private func createForwardConnection(
+        host: NWEndpoint.Host,
+        port: NWEndpoint.Port,
+        name: String
+    ) async throws -> NWConnection {
+        let connection = NWConnection(host: host, port: port, using: .tcp)
+
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             // 使用 class 包装避免 Swift 6 并发警告
             final class ResumeGuard: @unchecked Sendable {
@@ -242,22 +296,21 @@ final class ScrcpySocketAcceptor {
             }
             let guard_ = ResumeGuard()
 
-            connection.stateUpdateHandler = { [weak self, guard_] state in
+            connection.stateUpdateHandler = { [guard_] state in
                 guard !guard_.resumed else { return }
 
                 switch state {
                 case .ready:
                     guard_.resumed = true
-                    self?.updateState(.connected)
-                    AppLogger.connection.info("[SocketAcceptor] ✅ 连接已建立")
+                    AppLogger.connection.info("[SocketAcceptor] ✅ \(name) 连接已就绪")
                     continuation.resume()
 
                 case let .failed(error):
                     guard_.resumed = true
-                    self?.updateState(.error(ScrcpySocketError.connectionFailed(reason: error.localizedDescription)))
-                    AppLogger.connection.error("[SocketAcceptor] 连接失败: \(error.localizedDescription)")
+                    AppLogger.connection.error("[SocketAcceptor] \(name) 连接失败: \(error.localizedDescription)")
                     continuation
-                        .resume(throwing: ScrcpySocketError.connectionFailed(reason: error.localizedDescription))
+                        .resume(throwing: ScrcpySocketError
+                            .connectionFailed(reason: "\(name): \(error.localizedDescription)"))
 
                 case .cancelled:
                     if !guard_.resumed {
@@ -273,8 +326,7 @@ final class ScrcpySocketAcceptor {
             connection.start(queue: queue)
         }
 
-        // 连接成功后开始接收数据
-        startReceiving()
+        return connection
     }
 
     // MARK: - 视频连接处理
@@ -307,42 +359,98 @@ final class ScrcpySocketAcceptor {
     /// 开始接收数据
     private func startReceiving() {
         guard let connection = videoConnection else { return }
-
         receiveData(on: connection)
+
+        // 注意：音频连接由 setupAudioConnection 中的 stateUpdateHandler 处理
+        // 不在这里启动音频接收，因为此时音频连接可能还没 ready
+    }
+
+    /// 设置音频连接
+    private func setupAudioConnection(_ connection: NWConnection) {
+        connection.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .ready:
+                AppLogger.connection.info("[SocketAcceptor] ✅ 音频连接已就绪")
+                self?.startReceivingAudio()
+
+            case let .failed(error):
+                AppLogger.connection.error("[SocketAcceptor] 音频连接失败: \(error.localizedDescription)")
+                // 音频连接失败不影响视频流
+
+            case .cancelled:
+                AppLogger.connection.info("[SocketAcceptor] 音频连接已取消")
+
+            default:
+                break
+            }
+        }
+
+        connection.start(queue: queue)
+    }
+
+    /// 开始接收音频数据
+    private func startReceivingAudio() {
+        guard let connection = audioConnection else { return }
+        receiveAudioData(on: connection)
+    }
+
+    /// 接收音频数据
+    private func receiveAudioData(on connection: NWConnection) {
+        connection
+            .receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] content, _, isComplete, error in
+                guard let self else { return }
+
+                if let error {
+                    AppLogger.connection.error("[SocketAcceptor] 接收音频数据错误: \(error.localizedDescription)")
+                    return
+                }
+
+                if let data = content, !data.isEmpty {
+                    onAudioDataReceived?(data)
+                }
+
+                if isComplete {
+                    AppLogger.connection.info("[SocketAcceptor] 音频连接已关闭")
+                    return
+                }
+
+                // 继续接收
+                receiveAudioData(on: connection)
+            }
     }
 
     /// 接收到的数据包计数（用于调试）
     private var receivedPacketCount = 0
-    
+
     // MARK: - 调试统计
-    
+
     /// 总接收字节数
     private var totalBytesReceived: Int = 0
-    
+
     /// 统计周期内接收字节数
     private var bytesInPeriod: Int = 0
-    
+
     /// 统计周期内接收包数
     private var packetsInPeriod: Int = 0
-    
+
     /// 上次统计时间
     private var lastStatsTime = CFAbsoluteTimeGetCurrent()
-    
+
     /// 最小包大小
-    private var minPacketSize: Int = Int.max
-    
+    private var minPacketSize: Int = .max
+
     /// 最大包大小
     private var maxPacketSize: Int = 0
-    
+
     /// 接收间隔统计
     private var lastReceiveTime = CFAbsoluteTimeGetCurrent()
-    
+
     /// 最大接收间隔（ms）
     private var maxReceiveInterval: Double = 0
-    
+
     /// 接收间隔累计（用于计算平均值）
     private var totalReceiveIntervals: Double = 0
-    
+
     /// 接收间隔计数
     private var receiveIntervalCount: Int = 0
 
@@ -363,23 +471,24 @@ final class ScrcpySocketAcceptor {
                     let now = CFAbsoluteTimeGetCurrent()
                     let interval = (now - lastReceiveTime) * 1000 // 转换为毫秒
                     lastReceiveTime = now
-                    
+
                     receivedPacketCount += 1
+
                     totalBytesReceived += data.count
                     bytesInPeriod += data.count
                     packetsInPeriod += 1
-                    
+
                     // 更新包大小统计
                     minPacketSize = min(minPacketSize, data.count)
                     maxPacketSize = max(maxPacketSize, data.count)
-                    
+
                     // 更新接收间隔统计
                     if receivedPacketCount > 1 {
                         maxReceiveInterval = max(maxReceiveInterval, interval)
                         totalReceiveIntervals += interval
                         receiveIntervalCount += 1
                     }
-                    
+
                     // 每 5 秒重置统计（保留内部统计逻辑，移除日志输出）
                     let elapsed = now - lastStatsTime
                     if elapsed >= 5.0 {
@@ -393,11 +502,12 @@ final class ScrcpySocketAcceptor {
                         totalReceiveIntervals = 0
                         receiveIntervalCount = 0
                     }
-                    
+
                     onDataReceived?(data)
                 }
 
                 if isComplete {
+                    AppLogger.connection.info("[SocketAcceptor] 视频连接已完成")
                     updateState(.disconnected)
                     return
                 }

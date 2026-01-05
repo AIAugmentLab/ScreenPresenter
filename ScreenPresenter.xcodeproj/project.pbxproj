@@ -30,6 +30,13 @@
 		A44133622EF93201003DCDD3 /* Tools in Resources */ = {isa = PBXBuildFile; fileRef = A44133222EF93201003DCDD3 /* Tools */; };
 		A44133632EF93201003DCDD3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A44133242EF93201003DCDD3 /* Assets.xcassets */; };
 		A481F7992F0B579F00D9DAB0 /* FramePipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A481F7982F0B579F00D9DAB0 /* FramePipeline.swift */; };
+		A481F79C2F0B8CF300D9DAB0 /* ScrcpyAudioStreamParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A481F79B2F0B8CF300D9DAB0 /* ScrcpyAudioStreamParser.swift */; };
+		A481F79D2F0B8CF300D9DAB0 /* ScrcpyAudioDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A481F79A2F0B8CF300D9DAB0 /* ScrcpyAudioDecoder.swift */; };
+		A481F79E2F0B8CF400D9DAB0 /* ScrcpyOpusDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A481F79F2F0B8CF400D9DAB0 /* ScrcpyOpusDecoder.swift */; };
+		A481F7AE2F0BB5F200D9DAB0 /* ScrcpyRAWDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A481F7AD2F0BB5F200D9DAB0 /* ScrcpyRAWDecoder.swift */; };
+		A481F7B22F0BB61C00D9DAB0 /* AudioRegulator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A481F7AF2F0BB61C00D9DAB0 /* AudioRegulator.swift */; };
+		A481F7B32F0BB61C00D9DAB0 /* RingBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A481F7B12F0BB61C00D9DAB0 /* RingBuffer.swift */; };
+		A481F7B42F0BB61C00D9DAB0 /* AudioSynchronizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A481F7B02F0BB61C00D9DAB0 /* AudioSynchronizer.swift */; };
 		A4BF9B8B2EFCF160003DD09D /* PreviewContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4BF9B8A2EFCF160003DD09D /* PreviewContainerView.swift */; };
 		B1000001000000000001 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000002000000000001 /* AppState.swift */; };
 		B1000001000000000002 /* MetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000002000000000002 /* MetalRenderer.swift */; };
@@ -52,12 +59,14 @@
 		D1000001000000000006 /* DeviceCaptureInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000002000000000006 /* DeviceCaptureInfoView.swift */; };
 		DD604589504C2702EA91DEAD /* IOSDeviceSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C66B6DF8C1E31F829EDE370 /* IOSDeviceSource.swift */; };
 		E1000001000000000002 /* FBDeviceControlKit in Frameworks */ = {isa = PBXBuildFile; productRef = E1000002000000000002 /* FBDeviceControlKit */; };
+		E1000001000000000003 /* Opus in Frameworks */ = {isa = PBXBuildFile; productRef = E1000002000000000003 /* Opus */; };
 		F1000001000000000001 /* Colors.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000002000000000001 /* Colors.swift */; };
 		FB000001000000000001 /* IOSDeviceStateMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB000002000000000001 /* IOSDeviceStateMapper.swift */; };
 		FB000001000000000005 /* FBDeviceControlService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB000002000000000006 /* FBDeviceControlService.swift */; };
 		G1000001000000000001 /* AndroidADBService.swift in Sources */ = {isa = PBXBuildFile; fileRef = G1000002000000000001 /* AndroidADBService.swift */; };
 		G1000001000000000002 /* ScrcpyServerLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = G1000002000000000002 /* ScrcpyServerLauncher.swift */; };
 		G1000001000000000003 /* ScrcpySocketAcceptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = G1000002000000000003 /* ScrcpySocketAcceptor.swift */; };
+			G60942986538400935988421 /* ScrcpyErrorHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = G34952747508024177339802 /* ScrcpyErrorHelper.swift */; };
 		G1000001000000000004 /* ScrcpyVideoStreamParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = G1000002000000000004 /* ScrcpyVideoStreamParser.swift */; };
 		G1000001000000000005 /* VideoToolboxDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = G1000002000000000005 /* VideoToolboxDecoder.swift */; };
 /* End PBXBuildFile section */
@@ -90,6 +99,13 @@
 		A44133222EF93201003DCDD3 /* Tools */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Tools; sourceTree = "<group>"; };
 		A44133242EF93201003DCDD3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A481F7982F0B579F00D9DAB0 /* FramePipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FramePipeline.swift; sourceTree = "<group>"; };
+		A481F79A2F0B8CF300D9DAB0 /* ScrcpyAudioDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrcpyAudioDecoder.swift; sourceTree = "<group>"; };
+		A481F79B2F0B8CF300D9DAB0 /* ScrcpyAudioStreamParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrcpyAudioStreamParser.swift; sourceTree = "<group>"; };
+		A481F79F2F0B8CF400D9DAB0 /* ScrcpyOpusDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrcpyOpusDecoder.swift; sourceTree = "<group>"; };
+		A481F7AD2F0BB5F200D9DAB0 /* ScrcpyRAWDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrcpyRAWDecoder.swift; sourceTree = "<group>"; };
+		A481F7AF2F0BB61C00D9DAB0 /* AudioRegulator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRegulator.swift; sourceTree = "<group>"; };
+		A481F7B02F0BB61C00D9DAB0 /* AudioSynchronizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioSynchronizer.swift; sourceTree = "<group>"; };
+		A481F7B12F0BB61C00D9DAB0 /* RingBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingBuffer.swift; sourceTree = "<group>"; };
 		A4BF9B8A2EFCF160003DD09D /* PreviewContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewContainerView.swift; sourceTree = "<group>"; };
 		A6E8B56161A4793149B39A9D /* SystemSleepBlocker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SystemSleepBlocker.swift; sourceTree = "<group>"; };
 		B1000002000000000001 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
@@ -117,6 +133,7 @@
 		G1000002000000000001 /* AndroidADBService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AndroidADBService.swift; sourceTree = "<group>"; };
 		G1000002000000000002 /* ScrcpyServerLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrcpyServerLauncher.swift; sourceTree = "<group>"; };
 		G1000002000000000003 /* ScrcpySocketAcceptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrcpySocketAcceptor.swift; sourceTree = "<group>"; };
+			G34952747508024177339802 /* ScrcpyErrorHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrcpyErrorHelper.swift; sourceTree = "<group>"; };
 		G1000002000000000004 /* ScrcpyVideoStreamParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrcpyVideoStreamParser.swift; sourceTree = "<group>"; };
 		G1000002000000000005 /* VideoToolboxDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoToolboxDecoder.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -127,12 +144,24 @@
 			buildActionMask = 2147483647;
 			files = (
 				E1000001000000000002 /* FBDeviceControlKit in Frameworks */,
+				E1000001000000000003 /* Opus in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		2A000003000000000001 /* Audio */ = {
+			isa = PBXGroup;
+			children = (
+				2A000002000000000001 /* AudioPlayer.swift */,
+				A481F7AF2F0BB61C00D9DAB0 /* AudioRegulator.swift */,
+				A481F7B02F0BB61C00D9DAB0 /* AudioSynchronizer.swift */,
+				A481F7B12F0BB61C00D9DAB0 /* RingBuffer.swift */,
+			);
+			path = Audio;
+			sourceTree = "<group>";
+		};
 		7F9AAE23521E022B60B3B88B /* ColorCompensation */ = {
 			isa = PBXGroup;
 			children = (
@@ -192,10 +221,10 @@
 			isa = PBXGroup;
 			children = (
 				A44133062EF93201003DCDD3 /* DeviceSource.swift */,
-				A44133082EF93201003DCDD3 /* ScrcpyDeviceSource.swift */,
 				2C66B6DF8C1E31F829EDE370 /* IOSDeviceSource.swift */,
 				8FA214349613EC0729564B6E /* IOSScreenMirrorActivator.swift */,
 				G1000003000000000001 /* Scrcpy */,
+				A44133082EF93201003DCDD3 /* ScrcpyDeviceSource.swift */,
 			);
 			path = DeviceSource;
 			sourceTree = "<group>";
@@ -260,14 +289,6 @@
 			path = Core;
 			sourceTree = "<group>";
 		};
-		2A000003000000000001 /* Audio */ = {
-			isa = PBXGroup;
-			children = (
-				2A000002000000000001 /* AudioPlayer.swift */,
-			);
-			path = Audio;
-			sourceTree = "<group>";
-		};
 		A44133252EF93201003DCDD3 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
@@ -323,8 +344,13 @@
 		G1000003000000000001 /* Scrcpy */ = {
 			isa = PBXGroup;
 			children = (
+				A481F79A2F0B8CF300D9DAB0 /* ScrcpyAudioDecoder.swift */,
+				A481F79B2F0B8CF300D9DAB0 /* ScrcpyAudioStreamParser.swift */,
+				A481F79F2F0B8CF400D9DAB0 /* ScrcpyOpusDecoder.swift */,
+				A481F7AD2F0BB5F200D9DAB0 /* ScrcpyRAWDecoder.swift */,
 				G1000002000000000002 /* ScrcpyServerLauncher.swift */,
 				G1000002000000000003 /* ScrcpySocketAcceptor.swift */,
+						G34952747508024177339802 /* ScrcpyErrorHelper.swift */,
 				G1000002000000000004 /* ScrcpyVideoStreamParser.swift */,
 			);
 			path = Scrcpy;
@@ -348,6 +374,7 @@
 			name = ScreenPresenter;
 			packageProductDependencies = (
 				E1000002000000000002 /* FBDeviceControlKit */,
+				E1000002000000000003 /* Opus */,
 			);
 			productName = ScreenPresenter;
 			productReference = A1000001241A0000000001A1 /* ScreenPresenter.app */;
@@ -380,6 +407,7 @@
 			mainGroup = A10000012419FFF7000001A1;
 			packageReferences = (
 				E1000003000000000002 /* XCLocalSwiftPackageReference "FBDeviceControlKit" */,
+				E1000003000000000003 /* XCRemoteSwiftPackageReference "swift-opus" */,
 			);
 			productRefGroup = A1000001241A0001000001A3 /* Products */;
 			projectDirPath = "";
@@ -421,11 +449,15 @@
 				A1000001241A0001000001A1 /* AppDelegate.swift in Sources */,
 				3D08D092E75081FC3BA6C7A9 /* IOSDevice.swift in Sources */,
 				87C2CDD72DD49C69CE97F0CB /* IOSDeviceProvider.swift in Sources */,
+				A481F7B22F0BB61C00D9DAB0 /* AudioRegulator.swift in Sources */,
+				A481F7B32F0BB61C00D9DAB0 /* RingBuffer.swift in Sources */,
+				A481F7B42F0BB61C00D9DAB0 /* AudioSynchronizer.swift in Sources */,
 				DD604589504C2702EA91DEAD /* IOSDeviceSource.swift in Sources */,
 				908C36A37CB44D844E526D8E /* IOSScreenMirrorActivator.swift in Sources */,
 				G1000001000000000001 /* AndroidADBService.swift in Sources */,
 				G1000001000000000002 /* ScrcpyServerLauncher.swift in Sources */,
 				G1000001000000000003 /* ScrcpySocketAcceptor.swift in Sources */,
+				G60942986538400935988421 /* ScrcpyErrorHelper.swift in Sources */,
 				G1000001000000000004 /* ScrcpyVideoStreamParser.swift in Sources */,
 				G1000001000000000005 /* VideoToolboxDecoder.swift in Sources */,
 				B1000001000000000001 /* AppState.swift in Sources */,
@@ -436,10 +468,14 @@
 				B1000001000000000005 /* PreferencesWindowController.swift in Sources */,
 				D1000001000000000001 /* DevicePanelView.swift in Sources */,
 				D1000001000000000002 /* DeviceBezelView.swift in Sources */,
+				A481F7AE2F0BB5F200D9DAB0 /* ScrcpyRAWDecoder.swift in Sources */,
 				D1000001000000000003 /* DeviceModel.swift in Sources */,
 				D1000001000000000004 /* ToastView.swift in Sources */,
 				D1000001000000000005 /* DeviceStatusView.swift in Sources */,
 				D1000001000000000006 /* DeviceCaptureInfoView.swift in Sources */,
+				A481F79C2F0B8CF300D9DAB0 /* ScrcpyAudioStreamParser.swift in Sources */,
+				A481F79D2F0B8CF300D9DAB0 /* ScrcpyAudioDecoder.swift in Sources */,
+				A481F79E2F0B8CF400D9DAB0 /* ScrcpyOpusDecoder.swift in Sources */,
 				B1000001000000000009 /* DeviceInsightService.swift in Sources */,
 				B1000001000000000010 /* Localization.swift in Sources */,
 				F1000001000000000001 /* Colors.swift in Sources */,
@@ -695,10 +731,26 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		E1000003000000000003 /* XCRemoteSwiftPackageReference "swift-opus" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/alta/swift-opus.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.0.2;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		E1000002000000000002 /* FBDeviceControlKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = FBDeviceControlKit;
+		};
+		E1000002000000000003 /* Opus */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1000003000000000003 /* XCRemoteSwiftPackageReference "swift-opus" */;
+			productName = Opus;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

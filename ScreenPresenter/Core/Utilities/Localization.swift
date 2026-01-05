@@ -178,7 +178,7 @@ enum L10n {
         static var hideOthers: String { "menu.hideOthers".localized }
         static var showAll: String { "menu.showAll".localized }
         static var quit: String { "menu.quit".localized }
-        static var file: String { "menu.file".localized }
+        static var device: String { "menu.device".localized }
         static var refreshDevices: String { "menu.refreshDevices".localized }
         static var close: String { "menu.close".localized }
         static var view: String { "menu.view".localized }
@@ -277,7 +277,9 @@ enum L10n {
             static var appearance: String { "prefs.section.appearance".localized }
             static var layout: String { "prefs.section.layout".localized }
             static var frameRate: String { "prefs.section.frameRate".localized }
+            static var audio: String { "prefs.section.audio".localized }
             static var iosAudio: String { "prefs.section.iosAudio".localized }
+            static var androidAudio: String { "prefs.section.androidAudio".localized }
             static var android: String { "prefs.section.android".localized }
             static var video: String { "prefs.section.video".localized }
             static var display: String { "prefs.section.display".localized }
@@ -329,6 +331,8 @@ enum L10n {
             static var enableCapture: String { "prefs.audio.enableCapture".localized }
             static var volume: String { "prefs.audio.volume".localized }
             static var iosNote: String { "prefs.audio.iosNote".localized }
+            static var androidNote: String { "prefs.audio.androidNote".localized }
+            static var codec: String { "prefs.audio.codec".localized }
         }
 
         enum scrcpyPref {
@@ -341,7 +345,7 @@ enum L10n {
             static var noLimit: String { "prefs.scrcpy.noLimit".localized }
             static func pixels(_ n: Int) -> String { "prefs.scrcpy.pixels".localized(n) }
             static func mbps(_ n: Int) -> String { "prefs.scrcpy.mbps".localized(n) }
-            static var port: String { "prefs.scrcpy.port".localized }
+            static var portRange: String { "prefs.scrcpy.portRange".localized }
             static var codec: String { "prefs.scrcpy.codec".localized }
         }
 

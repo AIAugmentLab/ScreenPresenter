@@ -971,20 +971,30 @@ final class PreferencesViewController: NSViewController {
         addGroupRow(frameRateGroup, noteContainer, addDivider: false)
         addSettingsGroup(frameRateGroup, to: stackView)
 
-        // iOS 音频设置组
-        let iosAudioGroup = createSettingsGroup(title: L10n.prefs.section.iosAudio, icon: "speaker.wave.2.fill")
+        // 音频设置组（包含 iOS 和 Android）
+        let audioGroup = createSettingsGroup(title: L10n.prefs.section.audio, icon: "speaker.wave.2.fill")
 
-        // 启用音频捕获
-        addGroupRow(iosAudioGroup, createCheckboxRow(
+        // iOS 子标题
+        let iosSubtitle = NSTextField(labelWithString: "iOS")
+        iosSubtitle.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        iosSubtitle.textColor = .secondaryLabelColor
+        let iosSubtitleContainer = PaddingView(
+            contentView: iosSubtitle,
+            insets: NSEdgeInsets(top: LayoutMetrics.rowVerticalPadding, left: 0, bottom: 4, right: 0)
+        )
+        addGroupRow(audioGroup, iosSubtitleContainer, addDivider: false)
+
+        // iOS 启用音频捕获
+        addGroupRow(audioGroup, createCheckboxRow(
             label: L10n.prefs.audioPref.enableCapture,
             isOn: UserPreferences.shared.iosAudioEnabled,
             action: #selector(iosAudioEnabledChanged(_:))
         ) { checkbox in
             checkbox.tag = 4001
-        })
+        }, addDivider: false)
 
-        // 音量控制
-        addGroupRow(iosAudioGroup, createLabeledRow(label: L10n.prefs.audioPref.volume) {
+        // iOS 音量控制
+        addGroupRow(audioGroup, createLabeledRow(label: L10n.prefs.audioPref.volume) {
             let stack = StackContainerView()
             stack.axis = .horizontal
             stack.alignment = .centerY
@@ -1014,19 +1024,88 @@ final class PreferencesViewController: NSViewController {
         // iOS 音频说明
         let iosAudioNote = NSTextField(labelWithString: L10n.prefs.audioPref.iosNote)
         iosAudioNote.font = NSFont.systemFont(ofSize: 11)
-        iosAudioNote.textColor = .secondaryLabelColor
+        iosAudioNote.textColor = .tertiaryLabelColor
         let iosAudioNoteContainer = PaddingView(
             contentView: iosAudioNote,
-            insets: NSEdgeInsets(
-                top: 0,
-                left: 0,
-                bottom: LayoutMetrics.rowVerticalPadding,
-                right: 0
-            )
+            insets: NSEdgeInsets(top: 0, left: 0, bottom: LayoutMetrics.rowVerticalPadding * 1.5, right: 0)
         )
-        addGroupRow(iosAudioGroup, iosAudioNoteContainer, addDivider: false)
+        addGroupRow(audioGroup, iosAudioNoteContainer, addDivider: false)
 
-        addSettingsGroup(iosAudioGroup, to: stackView)
+        // Android 子标题
+        let androidSubtitle = NSTextField(labelWithString: "Android")
+        androidSubtitle.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        androidSubtitle.textColor = .secondaryLabelColor
+        let androidSubtitleContainer = PaddingView(
+            contentView: androidSubtitle,
+            insets: NSEdgeInsets(top: LayoutMetrics.rowVerticalPadding, left: 0, bottom: 4, right: 0)
+        )
+        addGroupRow(audioGroup, androidSubtitleContainer)
+
+        // Android 启用音频捕获
+        addGroupRow(audioGroup, createCheckboxRow(
+            label: L10n.prefs.audioPref.enableCapture,
+            isOn: UserPreferences.shared.androidAudioEnabled,
+            action: #selector(androidAudioEnabledChanged(_:))
+        ) { checkbox in
+            checkbox.tag = 4011
+        }, addDivider: false)
+
+        // Android 音量控制
+        addGroupRow(audioGroup, createLabeledRow(label: L10n.prefs.audioPref.volume) {
+            let stack = StackContainerView()
+            stack.axis = .horizontal
+            stack.alignment = .centerY
+            stack.spacing = 8
+
+            let slider = NSSlider()
+            slider.minValue = 0
+            slider.maxValue = 1
+            slider.doubleValue = Double(UserPreferences.shared.androidAudioVolume)
+            slider.target = self
+            slider.action = #selector(self.androidAudioVolumeChanged(_:))
+            slider.tag = 4012
+            slider.setFrameSize(NSSize(width: 200, height: slider.intrinsicContentSize.height))
+            slider.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+            stack.addArrangedSubview(slider)
+
+            let label = FixedSizeTextField(labelWithString: "\(Int(UserPreferences.shared.androidAudioVolume * 100))%")
+            label.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+            label.alignment = .right
+            label.tag = 4013
+            label.preferredWidth = 40
+            stack.addArrangedSubview(label)
+
+            return stack
+        }, addDivider: false)
+
+        // Android 音频编解码器
+        addGroupRow(audioGroup, createLabeledRow(label: L10n.prefs.audioPref.codec) {
+            let popup = NSPopUpButton()
+            popup.addItems(withTitles: ["Opus", "AAC", "Raw"])
+            popup.tag = 4014
+            // 设置当前选中项
+            switch UserPreferences.shared.androidAudioCodec {
+            case .opus: popup.selectItem(at: 0)
+            case .aac: popup.selectItem(at: 1)
+            case .raw: popup.selectItem(at: 2)
+            case .flac: popup.selectItem(at: 0) // FLAC 不支持，回退到 Opus
+            }
+            popup.target = self
+            popup.action = #selector(self.androidAudioCodecChanged(_:))
+            return popup
+        }, addDivider: false)
+
+        // Android 音频说明
+        let androidAudioNote = NSTextField(labelWithString: L10n.prefs.audioPref.androidNote)
+        androidAudioNote.font = NSFont.systemFont(ofSize: 11)
+        androidAudioNote.textColor = .tertiaryLabelColor
+        let androidAudioNoteContainer = PaddingView(
+            contentView: androidAudioNote,
+            insets: NSEdgeInsets(top: 0, left: 0, bottom: LayoutMetrics.rowVerticalPadding * 1.5, right: 0)
+        )
+        addGroupRow(audioGroup, androidAudioNoteContainer, addDivider: false)
+
+        addSettingsGroup(audioGroup, to: stackView)
 
         // Android (Scrcpy) 设置组
         let androidGroup = createSettingsGroup(title: L10n.prefs.section.android, icon: "apps.iphone")
@@ -1080,7 +1159,7 @@ final class PreferencesViewController: NSViewController {
             insets: NSEdgeInsets(
                 top: -4,
                 left: 0,
-                bottom: 4,
+                bottom: 10,
                 right: 0
             )
         )
@@ -1093,30 +1172,40 @@ final class PreferencesViewController: NSViewController {
             action: #selector(scrcpyShowTouchesChanged(_:))
         ))
 
-        // 连接端口
-        addGroupRow(androidGroup, createLabeledRow(label: L10n.prefs.scrcpyPref.port) {
+        // 端口范围（仿照 scrcpy 的 --port 参数）
+        addGroupRow(androidGroup, createLabeledRow(label: L10n.prefs.scrcpyPref.portRange) {
             let stack = StackContainerView()
             stack.axis = .horizontal
             stack.alignment = .centerY
             stack.spacing = 8
-            let textField = FixedSizeTextField()
-            textField.stringValue = String(UserPreferences.shared.scrcpyPort)
-            textField.font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
-            textField.alignment = .center
-            textField.preferredWidth = 70
-            textField.target = self
-            textField.action = #selector(scrcpyPortChanged(_:))
-            textField.tag = 3001
-            stack.addArrangedSubview(textField)
 
-            let stepper = NSStepper()
-            stepper.minValue = 1024
-            stepper.maxValue = 65535
-            stepper.intValue = Int32(UserPreferences.shared.scrcpyPort)
-            stepper.target = self
-            stepper.action = #selector(scrcpyPortStepperChanged(_:))
-            stepper.tag = 3001
-            stack.addArrangedSubview(stepper)
+            // 起始端口
+            let startTextField = FixedSizeTextField()
+            startTextField.stringValue = String(UserPreferences.shared.scrcpyPortRangeStart)
+            startTextField.font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+            startTextField.alignment = .center
+            startTextField.preferredWidth = 70
+            startTextField.target = self
+            startTextField.action = #selector(scrcpyPortRangeStartChanged(_:))
+            startTextField.tag = 3001
+            stack.addArrangedSubview(startTextField)
+
+            // 分隔符 "-"
+            let separatorLabel = NSTextField(labelWithString: "-")
+            separatorLabel.font = NSFont.systemFont(ofSize: 13)
+            stack.addArrangedSubview(separatorLabel)
+
+            // 结束端口
+            let endTextField = FixedSizeTextField()
+            endTextField.stringValue = String(UserPreferences.shared.scrcpyPortRangeEnd)
+            endTextField.font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+            endTextField.alignment = .center
+            endTextField.preferredWidth = 70
+            endTextField.target = self
+            endTextField.action = #selector(scrcpyPortRangeEndChanged(_:))
+            endTextField.tag = 3002
+            stack.addArrangedSubview(endTextField)
+
             return stack
         })
 
@@ -1131,7 +1220,7 @@ final class PreferencesViewController: NSViewController {
             popup.target = self
             popup.action = #selector(scrcpyCodecChanged(_:))
             return popup
-        }, addDivider: false)
+        }, addDivider: true)
 
         addSettingsGroup(androidGroup, to: stackView)
 
@@ -2007,28 +2096,22 @@ final class PreferencesViewController: NSViewController {
         UserPreferences.shared.scrcpyShowTouches = sender.state == .on
     }
 
-    @objc private func scrcpyPortChanged(_ sender: NSTextField) {
+    @objc private func scrcpyPortRangeStartChanged(_ sender: NSTextField) {
         guard let port = Int(sender.stringValue), port >= 1024, port <= 65535 else {
             // 恢复为当前值
-            sender.stringValue = String(UserPreferences.shared.scrcpyPort)
+            sender.stringValue = String(UserPreferences.shared.scrcpyPortRangeStart)
             return
         }
-        UserPreferences.shared.scrcpyPort = port
-        // 同步更新 stepper
-        if let stepper = sender.superview?.subviews.first(where: { $0.tag == 3001 && $0 is NSStepper }) as? NSStepper {
-            stepper.intValue = Int32(port)
-        }
+        UserPreferences.shared.scrcpyPortRangeStart = port
     }
 
-    @objc private func scrcpyPortStepperChanged(_ sender: NSStepper) {
-        let port = Int(sender.intValue)
-        UserPreferences.shared.scrcpyPort = port
-        // 同步更新文本框
-        if
-            let textField = sender.superview?.subviews
-                .first(where: { $0.tag == 3001 && $0 is NSTextField }) as? NSTextField {
-            textField.stringValue = String(port)
+    @objc private func scrcpyPortRangeEndChanged(_ sender: NSTextField) {
+        guard let port = Int(sender.stringValue), port >= 1024, port <= 65535 else {
+            // 恢复为当前值
+            sender.stringValue = String(UserPreferences.shared.scrcpyPortRangeEnd)
+            return
         }
+        UserPreferences.shared.scrcpyPortRangeEnd = port
     }
 
     @objc private func scrcpyCodecChanged(_ sender: NSPopUpButton) {
@@ -2058,6 +2141,43 @@ final class PreferencesViewController: NSViewController {
         if let label = sender.superview?.subviews.first(where: { $0.tag == 4003 }) as? NSTextField {
             label.stringValue = "\(Int(volume * 100))%"
         }
+    }
+
+    // MARK: - Android 音频设置
+
+    @objc private func androidAudioEnabledChanged(_ sender: NSButton) {
+        let enabled = sender.state == .on
+        UserPreferences.shared.androidAudioEnabled = enabled
+
+        // 注意：Android 音频需要重启捕获才能生效
+        // 因为 scrcpy 的音频设置在启动时确定
+    }
+
+    @objc private func androidAudioVolumeChanged(_ sender: NSSlider) {
+        let volume = Float(sender.doubleValue)
+        UserPreferences.shared.androidAudioVolume = volume
+
+        // 更新当前正在捕获的设备源
+        AppState.shared.androidDeviceSource?.audioVolume = volume
+
+        // 更新标签
+        if let label = sender.superview?.subviews.first(where: { $0.tag == 4013 }) as? NSTextField {
+            label.stringValue = "\(Int(volume * 100))%"
+        }
+    }
+
+    @objc private func androidAudioCodecChanged(_ sender: NSPopUpButton) {
+        let codec: ScrcpyConfiguration.AudioCodec
+        switch sender.indexOfSelectedItem {
+        case 0: codec = .opus
+        case 1: codec = .aac
+        case 2: codec = .raw
+        default: codec = .opus
+        }
+        UserPreferences.shared.androidAudioCodec = codec
+
+        // 注意：音频编解码器更改需要重启捕获才能生效
+        // 因为 scrcpy 的音频编解码器设置在启动时确定
     }
 
     @objc private func refreshToolchain() {

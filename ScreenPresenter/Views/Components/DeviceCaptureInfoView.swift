@@ -252,7 +252,7 @@ final class DeviceCaptureInfoView: NSView {
     }
 
     private func layoutContent() {
-        let availableWidth = max(0, bounds.width - 40)
+        let availableWidth = max(0, bounds.width - 16)
         updateFontsForWidth(availableWidth)
 
         // 使用固定高度确保空标签也能正确显示
@@ -503,14 +503,21 @@ final class DeviceCaptureInfoView: NSView {
     func setPlatform(_ platform: DevicePlatform) {
         currentPlatform = platform
 
-        // 目前只有 iOS 支持音频捕获
-        let supportsAudio = (platform == .ios)
+        // iOS 和 Android（Android 11+）都支持音频捕获
+        let supportsAudio = (platform == .ios || platform == .android)
         audioControlContainer.isHidden = !supportsAudio
 
         if supportsAudio {
             // 从偏好设置加载初始状态
-            let enabled = UserPreferences.shared.iosAudioEnabled
-            let volume = UserPreferences.shared.iosAudioVolume
+            let enabled: Bool
+            let volume: Float
+            if platform == .ios {
+                enabled = UserPreferences.shared.iosAudioEnabled
+                volume = UserPreferences.shared.iosAudioVolume
+            } else {
+                enabled = UserPreferences.shared.androidAudioEnabled
+                volume = UserPreferences.shared.androidAudioVolume
+            }
             updateAudioState(enabled: enabled, volume: volume)
         }
 
@@ -537,23 +544,36 @@ final class DeviceCaptureInfoView: NSView {
     // MARK: - 操作
 
     @objc private func audioToggleTapped() {
-        guard currentPlatform == .ios else { return }
+        guard currentPlatform == .ios || currentPlatform == .android else { return }
 
         // 切换音频状态
-        let newEnabled = !UserPreferences.shared.iosAudioEnabled
-        UserPreferences.shared.iosAudioEnabled = newEnabled
+        let newEnabled: Bool
+        let volume: Float
 
-        let volume = UserPreferences.shared.iosAudioVolume
+        if currentPlatform == .ios {
+            newEnabled = !UserPreferences.shared.iosAudioEnabled
+            UserPreferences.shared.iosAudioEnabled = newEnabled
+            volume = UserPreferences.shared.iosAudioVolume
+        } else {
+            newEnabled = !UserPreferences.shared.androidAudioEnabled
+            UserPreferences.shared.androidAudioEnabled = newEnabled
+            volume = UserPreferences.shared.androidAudioVolume
+        }
+
         updateAudioState(enabled: newEnabled, volume: volume)
-
         onAudioToggle?(newEnabled)
     }
 
     @objc private func volumeSliderChanged() {
-        guard currentPlatform == .ios else { return }
+        guard currentPlatform == .ios || currentPlatform == .android else { return }
 
         let volume = volumeSlider.floatValue
-        UserPreferences.shared.iosAudioVolume = volume
+
+        if currentPlatform == .ios {
+            UserPreferences.shared.iosAudioVolume = volume
+        } else {
+            UserPreferences.shared.androidAudioVolume = volume
+        }
 
         let volumePercent = Int(volume * 100)
         volumeLabel.stringValue = "\(volumePercent)%"

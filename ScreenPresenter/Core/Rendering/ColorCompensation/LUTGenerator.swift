@@ -113,7 +113,7 @@ enum LUTGenerator {
     /// - Parameters:
     ///   - lut: LUT 数组
     ///   - samplePoints: 采样点数（默认 16）
-    static func debugPrintLUT(_ lut: [Float], samplePoints: Int = 16) {
+    static func logLUT(_ lut: [Float], samplePoints: Int = 16) {
         let step = max(1, (lutSize - 1) / (samplePoints - 1))
         var output = "LUT Curve:\n"
         for i in stride(from: 0, to: lutSize, by: step) {
@@ -122,7 +122,7 @@ enum LUTGenerator {
             let outputPercent = Int(lut[i] * 100)
             output += String(format: "  %3d%% → %3d%%\n", inputPercent, outputPercent)
         }
-        print(output)
+        AppLogger.capture.info(output)
     }
 }
 

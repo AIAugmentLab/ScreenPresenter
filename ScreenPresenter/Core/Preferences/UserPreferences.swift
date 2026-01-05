@@ -46,7 +46,8 @@ final class UserPreferences {
         static let scrcpyBitrate = "scrcpyBitrate"
         static let scrcpyMaxSize = "scrcpyMaxSize"
         static let scrcpyShowTouches = "scrcpyShowTouches"
-        static let scrcpyPort = "scrcpyPort"
+        static let scrcpyPortRangeStart = "scrcpyPortRangeStart"
+        static let scrcpyPortRangeEnd = "scrcpyPortRangeEnd"
         static let scrcpyCodec = "scrcpyCodec"
         // 自定义路径
         static let customAdbPath = "customAdbPath"
@@ -62,6 +63,7 @@ final class UserPreferences {
         static let iosAudioVolume = "iosAudioVolume"
         static let androidAudioEnabled = "androidAudioEnabled"
         static let androidAudioVolume = "androidAudioVolume"
+        static let androidAudioCodec = "androidAudioCodec"
     }
 
     // MARK: - UserDefaults
@@ -215,13 +217,30 @@ final class UserPreferences {
         set { defaults.set(newValue, forKey: Keys.scrcpyShowTouches) }
     }
 
-    /// scrcpy 连接端口（默认 27183）
-    var scrcpyPort: Int {
+    /// scrcpy 端口范围起始（默认 27183，与 scrcpy 官方一致）
+    var scrcpyPortRangeStart: Int {
         get {
-            let value = defaults.integer(forKey: Keys.scrcpyPort)
+            let value = defaults.integer(forKey: Keys.scrcpyPortRangeStart)
             return value > 0 ? value : 27183
         }
-        set { defaults.set(newValue, forKey: Keys.scrcpyPort) }
+        set { defaults.set(newValue, forKey: Keys.scrcpyPortRangeStart) }
+    }
+
+    /// scrcpy 端口范围结束（默认 27199，支持最多 17 个并发连接）
+    var scrcpyPortRangeEnd: Int {
+        get {
+            let value = defaults.integer(forKey: Keys.scrcpyPortRangeEnd)
+            return value > 0 ? value : 27199
+        }
+        set { defaults.set(newValue, forKey: Keys.scrcpyPortRangeEnd) }
+    }
+
+    /// 端口范围（便捷属性）
+    var scrcpyPortRange: ClosedRange<Int> {
+        let start = scrcpyPortRangeStart
+        let end = scrcpyPortRangeEnd
+        // 确保 start <= end
+        return min(start, end) ... max(start, end)
     }
 
     /// scrcpy 编解码器（h264/h265，默认 h264）
@@ -307,7 +326,7 @@ final class UserPreferences {
         }
     }
     
-    /// Android 音频是否启用（默认 false，暂不支持）
+    /// Android 音频是否启用（默认 false，需要用户手动启用）
     var androidAudioEnabled: Bool {
         get {
             if defaults.object(forKey: Keys.androidAudioEnabled) == nil {
@@ -336,6 +355,21 @@ final class UserPreferences {
         }
     }
 
+    /// Android 音频编解码器（默认 opus）
+    var androidAudioCodec: ScrcpyConfiguration.AudioCodec {
+        get {
+            guard let rawValue = defaults.string(forKey: Keys.androidAudioCodec),
+                  let codec = ScrcpyConfiguration.AudioCodec(rawValue: rawValue) else {
+                return .opus
+            }
+            return codec
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Keys.androidAudioCodec)
+            NotificationCenter.default.post(name: .audioSettingsDidChange, object: nil, userInfo: ["platform": "android", "codec": newValue.rawValue])
+        }
+    }
+
     // MARK: - Private Init
 
     private init() {
@@ -351,7 +385,8 @@ final class UserPreferences {
             Keys.scrcpyBitrate: 8,
             Keys.scrcpyMaxSize: 0,
             Keys.scrcpyShowTouches: false,
-            Keys.scrcpyPort: 27183,
+            Keys.scrcpyPortRangeStart: 27183,
+            Keys.scrcpyPortRangeEnd: 27199,
             Keys.scrcpyCodec: ScrcpyCodecType.h264.rawValue,
             Keys.iosAudioEnabled: true,
             Keys.iosAudioVolume: 1.0,
@@ -376,6 +411,8 @@ final class UserPreferences {
             maxFps: captureFrameRate,
             showTouches: scrcpyShowTouches,
             stayAwake: true,
+            audioEnabled: androidAudioEnabled, // 从用户偏好读取音频开关
+            audioCodec: androidAudioCodec,
             videoCodec: videoCodec
         )
     }

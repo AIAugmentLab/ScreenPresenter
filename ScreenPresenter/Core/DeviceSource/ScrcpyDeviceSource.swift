@@ -42,8 +42,14 @@ struct ScrcpyConfiguration {
     /// 是否保持唤醒
     var stayAwake: Bool = true
 
-    /// 是否禁用音频
-    var noAudio: Bool = true
+    /// 是否启用音频（Android 11+ 支持）
+    var audioEnabled: Bool = false
+
+    /// 音频编解码器
+    var audioCodec: AudioCodec = .opus
+
+    /// 音频比特率 (bps)
+    var audioBitRate: Int = 128_000
 
     /// 视频编解码器
     var videoCodec: VideoCodec = .h264
@@ -73,6 +79,14 @@ struct ScrcpyConfiguration {
         }
     }
 
+    /// 音频编解码器枚举
+    enum AudioCodec: String {
+        case opus
+        case aac
+        case flac
+        case raw
+    }
+
     /// 录制格式枚举
     enum RecordFormat: String {
         case mp4
@@ -97,7 +111,16 @@ struct ScrcpyConfiguration {
         // 关键：不显示窗口，输出原始流
         // 注意: scrcpy 3.x 已移除 --no-display，使用 --no-playback 替代
         args.append("--no-playback")
-        args.append("--no-audio")
+
+        // 音频配置
+        if audioEnabled {
+            // 启用音频捕获（Android 11+ 支持）
+            args.append("--audio-codec=\(audioCodec.rawValue)")
+            args.append("--audio-bit-rate=\(audioBitRate)")
+        } else {
+            args.append("--no-audio")
+        }
+
         args.append("--no-control")
 
         // 视频源为显示器
@@ -117,7 +140,7 @@ struct ScrcpyConfiguration {
         args.append("-s")
         args.append(serial)
 
-        if noAudio {
+        if !audioEnabled {
             args.append("--no-audio")
         }
         if stayAwake {
@@ -155,13 +178,9 @@ struct ScrcpyConfiguration {
 /// Scrcpy 设备源实现
 /// 通过直接与 scrcpy-server 通信获取原始 H.264/H.265 码流并使用 VideoToolbox 解码
 final class ScrcpyDeviceSource: BaseDeviceSource {
-    // MARK: - 常量
-
-    /// 默认端口
-    private static let defaultPort = 27183
-
     // MARK: - 配置
 
+    /// 配置（在初始化时设置）
     private let configuration: ScrcpyConfiguration
     private let toolchainManager: ToolchainManager
 
@@ -181,6 +200,53 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
 
     /// VideoToolbox 解码器
     private var decoder: VideoToolboxDecoder?
+
+    // MARK: - 音频组件
+
+    /// 音频流解析器
+    private var audioStreamParser: ScrcpyAudioStreamParser?
+
+    /// AAC 音频解码器
+    private var aacDecoder: ScrcpyAudioDecoder?
+
+    /// OPUS 音频解码器
+    private var opusDecoder: ScrcpyOpusDecoder?
+
+    /// RAW PCM 音频解码器
+    private var rawDecoder: ScrcpyRAWDecoder?
+
+    /// 当前音频编解码器类型
+    private var currentAudioCodecId: UInt32?
+
+    /// 音频播放器
+    private var audioPlayer: AudioPlayer?
+
+    /// 音频同步器
+    private var audioSynchronizer: AudioSynchronizer?
+
+    /// 音频是否启用（从偏好设置读取，控制播放而非捕获）
+    var audioEnabled: Bool {
+        get { UserPreferences.shared.androidAudioEnabled }
+        set {
+            UserPreferences.shared.androidAudioEnabled = newValue
+            audioPlayer?.isMuted = !newValue
+        }
+    }
+
+    /// 音量 (0.0 - 1.0)
+    var audioVolume: Float {
+        get { UserPreferences.shared.androidAudioVolume }
+        set {
+            UserPreferences.shared.androidAudioVolume = newValue
+            audioPlayer?.volume = newValue
+        }
+    }
+
+    /// 是否静音（由 audioEnabled 自动控制）
+    var audioMuted: Bool {
+        get { !audioEnabled }
+        set { audioEnabled = !newValue }
+    }
 
     // MARK: - 状态
 
@@ -232,8 +298,8 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
         self.configuration = config
         self.toolchainManager = toolchainManager
 
-        // 从用户偏好读取端口配置
-        currentPort = UserPreferences.shared.scrcpyPort
+        // 从用户偏好读取端口范围起始值作为初始端口
+        currentPort = UserPreferences.shared.scrcpyPortRangeStart
 
         super.init(
             displayName: device.displayName,
@@ -367,40 +433,71 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
         }
 
         do {
+            guard adbService != nil else {
+                throw DeviceSourceError.captureStartFailed("ADB 服务未初始化")
+            }
+
+            // 0. 唤醒设备（如果息屏）
+            await wakeUpDeviceIfNeeded()
+
+            // 1. 查找可用端口（支持与其他 scrcpy 共存）
+            try await findAvailablePort()
+
+            // 2. 清理之前可能残留的 ADB 端口转发
+            await cleanupADBForwarding()
+
+            // 3. 创建/重建 launcher（使用新端口）
+            // 因为端口可能已经改变，需要重新创建 launcher
+            await recreateLauncherIfNeeded()
+
             guard let launcher = serverLauncher else {
                 throw DeviceSourceError.captureStartFailed("服务器启动器未初始化")
             }
 
-            // 1. 先推送 scrcpy-server 并设置端口转发
+            AppLogger.capture
+                .debug("[Scrcpy] 启动参数: 端口=\(currentPort), scid=\(launcher.scid), socketName=\(launcher.socketName)")
+
+            // 4. 推送 scrcpy-server 并设置端口转发
             try await launcher.prepareEnvironment(configuration: configuration)
 
-            // 2. 创建并启动 Socket 监听器/连接器（必须在服务端启动前！）
+            // 5. 创建并启动 Socket 监听器/连接器（必须在服务端启动前！）
             socketAcceptor = ScrcpySocketAcceptor(
                 port: currentPort,
-                connectionMode: launcher.connectionMode
+                connectionMode: launcher.connectionMode,
+                audioEnabled: configuration.audioEnabled
             )
 
-            // 设置数据接收回调
+            // 设置视频数据接收回调
             socketAcceptor?.onDataReceived = { [weak self] data in
-                // 使用 autoreleasepool 确保每次数据处理过程中创建的临时对象及时释放
-                // NWConnection 回调在后台线程，如果没有 autoreleasepool，
-                // autorelease 对象会堆积直到某个时机才释放
                 autoreleasepool {
                     self?.handleReceivedData(data)
                 }
             }
 
-            // 3. 启动监听/连接
+            // 设置音频数据接收回调（如果启用）
+            if configuration.audioEnabled {
+                AppLogger.capture.debug("[Scrcpy] 音频已启用，设置音频组件")
+                setupAudioComponents()
+                socketAcceptor?.onAudioDataReceived = { [weak self] data in
+                    autoreleasepool {
+                        self?.handleReceivedAudioData(data)
+                    }
+                }
+            }
+
+            // 4. 启动监听/连接
             try await socketAcceptor?.start()
 
-            // 4. 提前设置状态为 capturing，以便接收到数据后立即处理
-            // 这样解码后的帧不会因为状态检查而被丢弃
+            // 5. 提前启动帧管道（必须在数据开始接收之前！）
+            framePipeline.start(size: CGSize(width: 1080, height: 1920))
+
+            // 6. 提前设置状态为 capturing
             updateState(.capturing)
 
-            // 5. 现在启动 scrcpy-server（它会连接到我们的监听端口）
+            // 7. 启动 scrcpy-server
             serverProcess = try await launcher.startServer(configuration: configuration)
 
-            // 6. 等待视频连接建立
+            // 8. 等待视频连接建立
             try await socketAcceptor?.waitForVideoConnection(timeout: 10)
 
             AppLogger.capture.info("捕获已启动: \(displayName)")
@@ -408,17 +505,172 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
             // 启动进程监控
             startProcessMonitoring()
 
-            // 启动帧管道（使用初始尺寸，会在收到第一帧时更新）
-            framePipeline.start(size: CGSize(width: 1080, height: 1920))
-
-            // 启动帧管道统计任务（每 5 秒输出一次）
+            // 启动帧管道统计任务
             startPipelineStats()
 
         } catch {
-            let captureError = DeviceSourceError.captureStartFailed(error.localizedDescription)
-            updateState(.error(captureError))
+            // 捕获失败时清理资源
+            await cleanupAfterError()
+
+            // 转换为用户友好的错误
+            let scrcpyError = ScrcpyErrorHelper.mapError(error, port: currentPort)
+            let captureError = DeviceSourceError.captureStartFailed(scrcpyError.fullDescription)
+
+            AppLogger.capture.error("[Scrcpy] 启动失败: \(scrcpyError.fullDescription)")
+
+            // 重要：错误后恢复到 connected 状态，而不是 error 状态
+            // 这样用户可以重新尝试，而不需要重启应用
+            updateState(.connected)
+
             throw captureError
         }
+    }
+
+    /// 创建或重建 ScrcpyServerLauncher
+    /// 当端口改变时需要重建，因为 launcher 的端口在初始化时就固定了
+    private func recreateLauncherIfNeeded() async {
+        guard let adbService else { return }
+
+        // 获取 scrcpy-server 路径（需要在 MainActor 上访问）
+        let serverPath = await MainActor.run { toolchainManager.scrcpyServerPath }
+
+        guard let serverPath else {
+            AppLogger.capture.error("[ScrcpyDeviceSource] 无法获取 scrcpy-server 路径")
+            return
+        }
+
+        // 获取 scrcpy 版本
+        let scrcpyVersion = await getScrcpyVersion()
+
+        // 检查是否需要重建（端口改变，或者 launcher 不存在）
+        if serverLauncher == nil {
+            AppLogger.capture.info("[ScrcpyDeviceSource] 创建 ScrcpyServerLauncher (端口: \(currentPort))")
+        } else {
+            AppLogger.capture.info("[ScrcpyDeviceSource] 重建 ScrcpyServerLauncher (新端口: \(currentPort))")
+        }
+
+        serverLauncher = ScrcpyServerLauncher(
+            adbService: adbService,
+            serverLocalPath: serverPath,
+            port: currentPort,
+            scrcpyVersion: scrcpyVersion
+        )
+    }
+
+    /// 唤醒设备（如果息屏）
+    /// 通过 ADB 发送电源键事件，模拟 scrcpy 的 power_on 行为
+    private func wakeUpDeviceIfNeeded() async {
+        guard let adbService else { return }
+
+        AppLogger.capture.info("[ScrcpyDeviceSource] 检测设备屏幕状态...")
+
+        do {
+            // 检测屏幕是否亮起
+            // dumpsys power 输出包含 "mWakefulness=Awake" (亮屏) 或 "mWakefulness=Asleep" (息屏)
+            let result = try await adbService.shell("dumpsys power | grep mWakefulness")
+
+            let isScreenOn = result.stdout.contains("Awake")
+
+            if isScreenOn {
+                AppLogger.capture.info("[ScrcpyDeviceSource] 设备屏幕已亮起")
+                return
+            }
+
+            AppLogger.capture.info("[ScrcpyDeviceSource] 设备息屏，发送电源键唤醒...")
+
+            // 发送电源键事件唤醒设备 (keyevent 26 = KEYCODE_POWER)
+            _ = try await adbService.shell("input keyevent 26")
+
+            // 等待设备实际响应（参考 scrcpy 的 500ms 延迟）
+            try await Task.sleep(nanoseconds: 500_000_000)
+
+            AppLogger.capture.info("[ScrcpyDeviceSource] 设备已唤醒")
+
+        } catch {
+            // 唤醒失败不应阻止捕获，只记录警告
+            AppLogger.capture.warning("[ScrcpyDeviceSource] 检测/唤醒设备失败: \(error.localizedDescription)")
+        }
+    }
+
+    /// 查找可用端口（支持与其他 scrcpy 实例共存）
+    /// 仿照 scrcpy 的行为：从配置的起始端口开始，如果被占用则尝试下一个端口
+    /// 端口范围由偏好设置控制，默认 27183 - 27199（与 scrcpy 官方一致）
+    private func findAvailablePort() async throws {
+        let portRange = UserPreferences.shared.scrcpyPortRange
+
+        for port in portRange {
+            let available = ScrcpyErrorHelper.isPortAvailable(port)
+            if available {
+                currentPort = port
+                AppLogger.capture.debug("[Scrcpy] 使用端口 \(port)")
+                return
+            }
+        }
+
+        // 所有端口都被占用
+        throw ScrcpyError.portInUse(port: portRange.lowerBound)
+    }
+
+    /// 清理 ADB 端口转发（移除可能残留的转发规则）
+    private func cleanupADBForwarding() async {
+        guard let adbService else { return }
+
+        AppLogger.capture.info("[ScrcpyDeviceSource] 清理残留的 ADB 端口转发...")
+
+        // 移除与当前端口相关的 forward 和 reverse
+        await adbService.removeForward(tcpPort: currentPort)
+        // reverse 需要 socketName，但此时 launcher 可能还没初始化
+        // 所以我们只清理 forward，reverse 由 launcher 在 stop() 时清理
+    }
+
+    /// 错误后清理资源
+    private func cleanupAfterError() async {
+        AppLogger.capture.info("[ScrcpyDeviceSource] 错误后清理资源...")
+
+        // 停止帧管道
+        stopPipelineStats()
+        framePipeline.stop()
+
+        // 清理 socket
+        socketAcceptor?.stop()
+        socketAcceptor = nil
+
+        // 停止 launcher（会清理端口转发）
+        await serverLauncher?.stop()
+
+        // 终止服务器进程
+        if let process = serverProcess, process.isRunning {
+            process.terminate()
+        }
+        serverProcess = nil
+
+        // 清理音频组件
+        cleanupAudioComponents()
+
+        // 重置解析器和解码器
+        streamParser?.reset()
+        decoder?.reset()
+    }
+
+    /// 重置连接（供外部调用，用于从错误状态恢复）
+    func resetConnection() async {
+        AppLogger.capture.info("[ScrcpyDeviceSource] 重置连接...")
+
+        // 1. 彻底清理所有资源
+        await cleanupAfterError()
+
+        // 2. 清理 ADB 转发
+        await cleanupADBForwarding()
+
+        // 3. 尝试释放端口
+        _ = await ScrcpyErrorHelper.tryReleasePort(currentPort)
+
+        // 4. 重置状态
+        if state != .disconnected {
+            updateState(.connected)
+        }
+
+        AppLogger.capture.info("[ScrcpyDeviceSource] 连接已重置，可以重新开始捕获")
     }
 
     override func stopCapture() async {
@@ -426,7 +678,7 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
 
         // 0. 停止帧管道统计任务
         stopPipelineStats()
-        
+
         // 0.5. 停止帧管道
         framePipeline.stop()
 
@@ -453,6 +705,9 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
         // 6. 重置帧管道（清空旧帧）
         framePipeline.stop()
 
+        // 7. 停止音频组件
+        cleanupAudioComponents()
+
         if state == .capturing {
             updateState(.connected)
         }
@@ -464,7 +719,7 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
 
     /// 过滤掉的非 VCL NAL 计数（用于诊断）
     private var filteredNonVCLCount = 0
-    
+
     /// 端到端延迟统计
     private var frameReceiveTime: CFAbsoluteTime = 0
     private var frameDecodeCompleteTime: CFAbsoluteTime = 0
@@ -477,7 +732,7 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
     private func handleReceivedData(_ data: Data) {
         // 记录数据接收时间
         frameReceiveTime = CFAbsoluteTimeGetCurrent()
-        
+
         guard let parser = streamParser, let decoder else { return }
 
         // 解析 NAL 单元
@@ -566,15 +821,15 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
     /// 使用双帧缓冲设计（与 scrcpy frame_buffer.c 一致）
     private func handleDecodedFrame(_ pixelBuffer: CVPixelBuffer) {
         guard state == .capturing else { return }
-        
+
         // 计算端到端延迟（从数据接收到解码完成）
         let decodeCompleteTime = CFAbsoluteTimeGetCurrent()
         let e2eLatency = (decodeCompleteTime - frameReceiveTime) * 1000 // 转换为毫秒
-        
+
         totalE2ELatency += e2eLatency
         maxE2ELatency = max(maxE2ELatency, e2eLatency)
         e2eLatencyCount += 1
-        
+
         // 每 5 秒重置统计（保留内部统计逻辑，移除日志输出）
         let now = CFAbsoluteTimeGetCurrent()
         let elapsed = now - lastE2EStatsTime
@@ -709,5 +964,100 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
     private func stopPipelineStats() {
         pipelineStatsTask?.cancel()
         pipelineStatsTask = nil
+    }
+
+    // MARK: - 音频处理
+
+    /// 设置音频组件
+    private func setupAudioComponents() {
+        // 创建音频流解析器
+        audioStreamParser = ScrcpyAudioStreamParser()
+
+        // [调试测试 10b] 测试 regulator.push
+        audioStreamParser?.onCodecIdParsed = { [weak self] codecId in
+            guard let self else { return }
+
+            let codecName: String
+            switch codecId {
+            case ScrcpyAudioStreamParser.codecIdOpus:
+                codecName = "opus"
+                // 创建 OPUS 解码器
+                opusDecoder = ScrcpyOpusDecoder()
+                opusDecoder?.initialize(codecId: codecId)
+            case ScrcpyAudioStreamParser.codecIdAAC:
+                codecName = "aac"
+            case ScrcpyAudioStreamParser.codecIdRAW:
+                codecName = "raw"
+            default:
+                codecName = String(format: "0x%08x", codecId)
+            }
+            AppLogger.capture.debug("[音频] codec: \(codecName)")
+
+            // 创建音频播放器
+            audioPlayer = AudioPlayer()
+
+            // 启用音频调节器
+            audioPlayer?.enableRegulator(sampleRate: 48000, channels: 2, targetBufferingMs: 50)
+
+            // 设置 onDecodedAudio 回调
+            opusDecoder?.onDecodedAudio = { [weak self] pcmData, format in
+                guard let self else { return }
+
+                // 检查是否已初始化
+                if audioPlayer?.isInitialized != true {
+                    _ = audioPlayer?.initializeFromFormat(format)
+                    audioPlayer?.start()
+                }
+
+                // 将数据推送到 regulator
+                audioPlayer?.processPCMData(pcmData, format: format)
+            }
+        }
+
+        // 实际调用解码 - 跳过 config 包
+        audioStreamParser?.onAudioPacket = { [weak self] data, pts, isConfig, isKeyFrame in
+            guard let self else { return }
+            // Config 包不是音频数据，跳过
+            if isConfig {
+                return
+            }
+            opusDecoder?.decode(data, pts: pts, isKeyFrame: isKeyFrame)
+        }
+    }
+
+    /// 音频处理队列（避免阻塞网络队列）
+    private let audioProcessingQueue = DispatchQueue(label: "com.screenPresenter.audio.processing", qos: .userInitiated)
+
+    /// 处理接收到的音频数据
+    private func handleReceivedAudioData(_ data: Data) {
+        // 将音频处理移到单独的队列，避免阻塞网络接收
+        audioProcessingQueue.async { [weak self] in
+            self?.audioStreamParser?.processData(data)
+        }
+    }
+
+    /// 清理音频组件
+    private func cleanupAudioComponents() {
+        audioPlayer?.stop()
+        audioPlayer?.reset()
+        audioPlayer = nil
+
+        aacDecoder?.cleanup()
+        aacDecoder = nil
+
+        opusDecoder?.cleanup()
+        opusDecoder = nil
+
+        rawDecoder?.cleanup()
+        rawDecoder = nil
+
+        currentAudioCodecId = nil
+
+        // 清理音频同步器
+        audioSynchronizer?.reset()
+        audioSynchronizer = nil
+
+        audioStreamParser?.reset()
+        audioStreamParser = nil
     }
 }

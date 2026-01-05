@@ -31,7 +31,7 @@
 "menu.hideOthers" = "Hide Others";
 "menu.showAll" = "Show All";
 "menu.quit" = "Quit ScreenPresenter";
-"menu.file" = "File";
+"menu.device" = "Device";
 "menu.refreshDevices" = "Refresh Devices";
 "menu.close" = "Close";
 "menu.window" = "Window";
@@ -97,7 +97,9 @@
 "prefs.section.appearance" = "Appearance";
 "prefs.section.layout" = "Layout";
 "prefs.section.frameRate" = "Frame Rate";
+"prefs.section.audio" = "Audio";
 "prefs.section.iosAudio" = "iOS Audio";
+"prefs.section.androidAudio" = "Android Audio";
 "prefs.section.android" = "Android (Scrcpy)";
 "prefs.section.video" = "Video";
 "prefs.section.display" = "Display";
@@ -111,6 +113,8 @@
 "prefs.audio.enableCapture" = "Enable Audio Capture";
 "prefs.audio.volume" = "Volume";
 "prefs.audio.iosNote" = "Audio capture requires iOS device connected via USB";
+"prefs.audio.androidNote" = "Requires Android 11+. Changes take effect on next capture.";
+"prefs.audio.codec" = "Audio Codec";
 
 // MARK: - Preferences - General
 "prefs.general.displaySettings" = "Display Settings";
@@ -153,7 +157,7 @@
 "prefs.scrcpy.noLimit" = "No Limit";
 "prefs.scrcpy.pixels" = "%d pixels";
 "prefs.scrcpy.mbps" = "%d Mbps";
-"prefs.scrcpy.port" = "Connection Port";
+"prefs.scrcpy.portRange" = "Port Range";
 "prefs.scrcpy.codec" = "Video Codec";
 
 // MARK: - Preferences - Toolchain

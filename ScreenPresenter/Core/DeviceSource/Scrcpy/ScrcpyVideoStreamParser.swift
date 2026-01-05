@@ -367,7 +367,9 @@ final class ScrcpyPacketMerger {
             pendingConfig = nil
             mergeCount += 1
             AppLogger.capture
-                .info("[PacketMerger] 合并 config (\(config.count)B) + media (\(packetData.count)B) = \(merged.count)B，累计合并: \(mergeCount)")
+                .info(
+                    "[PacketMerger] 合并 config (\(config.count)B) + media (\(packetData.count)B) = \(merged.count)B，累计合并: \(mergeCount)"
+                )
             return merged
         } else {
             // 普通 media packet，直接返回
@@ -465,39 +467,39 @@ final class ScrcpyVideoStreamParser {
 
     /// 当前码率（bps）
     private(set) var currentBitrate: Double = 0
-    
+
     // MARK: - 调试统计
-    
+
     /// 解析帧计数（周期内）
     private var framesInPeriod: Int = 0
-    
+
     /// 关键帧计数（周期内）
     private var keyFramesInPeriod: Int = 0
-    
+
     /// NAL 单元计数（周期内）
     private var nalUnitsInPeriod: Int = 0
-    
+
     /// 上次解析统计时间
     private var lastParseStatsTime = CFAbsoluteTimeGetCurrent()
-    
+
     /// 解析耗时累计（用于计算平均值）
     private var totalParseTime: Double = 0
-    
+
     /// 最大单次解析耗时
     private var maxParseTime: Double = 0
-    
+
     /// 解析调用次数
     private var parseCallCount: Int = 0
-    
+
     /// 帧间隔统计
     private var lastFrameTime = CFAbsoluteTimeGetCurrent()
-    
+
     /// 最大帧间隔
     private var maxFrameInterval: Double = 0
-    
+
     /// 帧间隔累计
     private var totalFrameIntervals: Double = 0
-    
+
     /// 帧间隔计数
     private var frameIntervalCount: Int = 0
 
@@ -543,7 +545,7 @@ final class ScrcpyVideoStreamParser {
     /// - Returns: 解析出的 NAL 单元列表
     func append(_ data: Data) -> [ParsedNALUnit] {
         let parseStartTime = CFAbsoluteTimeGetCurrent()
-        
+
         bufferLock.lock()
         defer { bufferLock.unlock() }
 
@@ -554,39 +556,38 @@ final class ScrcpyVideoStreamParser {
         updateBitrateStatistics(bytesReceived: data.count)
 
         // 根据模式选择解析方式
-        let nalUnits: [ParsedNALUnit]
-        if useRawStream || parserState == .parsingRawStream {
-            nalUnits = parseNALUnits()
+        let nalUnits: [ParsedNALUnit] = if useRawStream || parserState == .parsingRawStream {
+            parseNALUnits()
         } else {
-            nalUnits = parseProtocol()
+            parseProtocol()
         }
-        
+
         // 调试统计
         let parseTime = (CFAbsoluteTimeGetCurrent() - parseStartTime) * 1000 // 转换为毫秒
         parseCallCount += 1
         totalParseTime += parseTime
         maxParseTime = max(maxParseTime, parseTime)
-        
+
         // 统计 NAL 单元
         nalUnitsInPeriod += nalUnits.count
-        
+
         // 统计帧（VCL NAL 单元）
-        let vclUnits = nalUnits.filter { $0.isVCL }
+        let vclUnits = nalUnits.filter(\.isVCL)
         if !vclUnits.isEmpty {
             let now = CFAbsoluteTimeGetCurrent()
             let frameInterval = (now - lastFrameTime) * 1000
-            
+
             if framesInPeriod > 0 {
                 maxFrameInterval = max(maxFrameInterval, frameInterval)
                 totalFrameIntervals += frameInterval
                 frameIntervalCount += 1
             }
             lastFrameTime = now
-            
+
             framesInPeriod += vclUnits.count
-            keyFramesInPeriod += vclUnits.filter { $0.isEffectiveKeyFrame }.count
+            keyFramesInPeriod += vclUnits.count(where: { $0.isEffectiveKeyFrame })
         }
-        
+
         // 每 5 秒重置统计（保留内部统计逻辑，移除日志输出）
         let now = CFAbsoluteTimeGetCurrent()
         let elapsed = now - lastParseStatsTime
@@ -603,7 +604,7 @@ final class ScrcpyVideoStreamParser {
             totalFrameIntervals = 0
             frameIntervalCount = 0
         }
-        
+
         return nalUnits
     }
 
@@ -685,6 +686,7 @@ final class ScrcpyVideoStreamParser {
                 }
 
                 let firstByte = buffer[0]
+
                 // 检查是否是真正的 dummy byte (0x00)
                 // 如果不是 0x00，可能服务端没有发送 dummy byte
                 if firstByte == 0x00 {

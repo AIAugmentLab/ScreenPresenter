@@ -471,7 +471,7 @@ final class MainViewController: NSViewController {
                 await MainActor.run {
                     iosPanelView.stopActionLoading()
                 }
-                showError(L10n.error.startCaptureFailed(L10n.platform.ios, error.localizedDescription))
+                showCaptureError(platform: L10n.platform.ios, error: error)
             }
         }
     }
@@ -542,7 +542,7 @@ final class MainViewController: NSViewController {
                 await MainActor.run {
                     androidPanelView.stopActionLoading()
                 }
-                showError(L10n.error.startCaptureFailed(L10n.platform.android, error.localizedDescription))
+                showCaptureError(platform: L10n.platform.android, error: error)
             }
         }
     }
@@ -611,6 +611,100 @@ final class MainViewController: NSViewController {
     /// 更新本地化文本（语言切换时调用）
     func updateLocalizedTexts() {
         previewContainerView.updateLocalizedTexts()
+    }
+
+    // MARK: - 错误处理
+
+    /// 显示捕获错误，提取根本原因避免重复包装
+    /// 如果是 Android 端口占用错误，提供"重置连接"选项
+    private func showCaptureError(platform: String, error: Error) {
+        let rootCause = extractRootCause(from: error)
+
+        // 检查是否是 Android 端口占用错误，需要提供重置选项
+        if platform == L10n.platform.android, isPortInUseError(rootCause) {
+            showErrorWithResetOption(
+                title: L10n.error.startCaptureFailed(platform, ""),
+                message: rootCause
+            )
+        } else {
+            showError(L10n.error.startCaptureFailed(platform, rootCause))
+        }
+    }
+
+    /// 检查是否是端口占用错误
+    private func isPortInUseError(_ message: String) -> Bool {
+        let lowercased = message.lowercased()
+        return lowercased.contains("端口") && lowercased.contains("占用") ||
+               lowercased.contains("address already in use") ||
+               lowercased.contains("port") && lowercased.contains("in use")
+    }
+
+    /// 显示带有"重置连接"选项的错误弹窗
+    private func showErrorWithResetOption(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "重置连接")
+        alert.addButton(withTitle: "取消")
+
+        // 使用 sheet 方式显示，避免 runModal() 的优先级反转警告
+        guard let window = view.window else {
+            // 如果没有窗口，fallback 到 runModal
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                resetAndroidConnection()
+            }
+            return
+        }
+
+        alert.beginSheetModal(for: window) { [weak self] response in
+            if response == .alertFirstButtonReturn {
+                self?.resetAndroidConnection()
+            }
+        }
+    }
+
+    /// 重置 Android 连接
+    private func resetAndroidConnection() {
+        Task {
+            // 显示加载状态
+            await MainActor.run {
+                androidPanelView.startActionLoading()
+            }
+
+            // 执行重置
+            if let scrcpySource = AppState.shared.androidDeviceSource {
+                await scrcpySource.resetConnection()
+            }
+
+            await MainActor.run {
+                androidPanelView.stopActionLoading()
+                ToastView.success("连接已重置，请重新开始投屏", in: androidPanelView)
+            }
+        }
+    }
+
+    /// 提取错误的根本原因，避免多层包装
+    private func extractRootCause(from error: Error) -> String {
+        // 如果是 DeviceSourceError.captureStartFailed，提取内部原因
+        if let deviceError = error as? DeviceSourceError {
+            switch deviceError {
+            case let .captureStartFailed(reason):
+                // 直接返回原因，不再包装
+                return reason
+            default:
+                return error.localizedDescription
+            }
+        }
+
+        // 如果是 NSError，检查是否有 underlyingError
+        let nsError = error as NSError
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? Error {
+            return extractRootCause(from: underlying)
+        }
+
+        return error.localizedDescription
     }
 }
 
