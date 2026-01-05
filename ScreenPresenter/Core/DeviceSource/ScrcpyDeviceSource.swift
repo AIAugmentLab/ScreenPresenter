@@ -335,21 +335,11 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
         AppLogger.connection.info("开始连接 Android 设备: \(configuration.serial)")
 
         // 获取工具链路径
-        let (adbPath, scrcpyServerPath, scrcpyReady) = await MainActor.run {
+        let (adbPath, scrcpyServerPath) = await MainActor.run {
             (
                 toolchainManager.adbPath,
-                toolchainManager.scrcpyServerPath,
-                toolchainManager.scrcpyStatus.isReady
+                toolchainManager.scrcpyServerPath
             )
-        }
-
-        AppLogger.connection.info("scrcpy 状态: \(scrcpyReady ? "就绪" : "未就绪")")
-
-        guard scrcpyReady else {
-            let error = DeviceSourceError.connectionFailed("scrcpy 未安装")
-            AppLogger.connection.error("连接失败: scrcpy 未安装")
-            updateState(.error(error))
-            throw error
         }
 
         guard let serverPath = scrcpyServerPath else {
@@ -382,7 +372,7 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
         }
 
         // 获取 scrcpy 版本
-        let scrcpyVersion = await getScrcpyVersion()
+        let scrcpyVersion = getScrcpyVersion()
 
         // 创建服务器启动器
         guard let adbService else {
@@ -540,7 +530,7 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
         }
 
         // 获取 scrcpy 版本
-        let scrcpyVersion = await getScrcpyVersion()
+        let scrcpyVersion = getScrcpyVersion()
 
         // 检查是否需要重建（端口改变，或者 launcher 不存在）
         if serverLauncher == nil {
@@ -879,44 +869,15 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
 
     // MARK: - 辅助方法
 
+    // MARK: - 常量
+
+    /// 内置 scrcpy-server 版本号
+    private static let bundledScrcpyServerVersion = "3.3.4"
+
     /// 获取 scrcpy 版本
-    /// 优先从 scrcpy 可执行文件获取，失败时使用默认版本
-    private func getScrcpyVersion() async -> String {
-        let scrcpyPath = await MainActor.run { toolchainManager.scrcpyPath }
-
-        AppLogger.process.info("获取 scrcpy 版本，路径: \(scrcpyPath)")
-
-        do {
-            let runner = await MainActor.run { ProcessRunner() }
-            let result = try await runner.run(scrcpyPath, arguments: ["--version"])
-
-            AppLogger.process.debug("scrcpy --version 输出: \(result.stdout.prefix(100))")
-
-            // 解析版本号，格式如: "scrcpy 3.3.4 <https://...>"
-            // 必须匹配完整的三段式版本号 (x.y.z)
-            if let match = result.stdout.firstMatch(of: /scrcpy\s+(\d+\.\d+\.\d+)/) {
-                let version = String(match.1)
-                AppLogger.process.info("✅ 获取到 scrcpy 版本: \(version)")
-                return version
-            }
-
-            // 尝试匹配两段式版本号 (x.y)
-            if let match = result.stdout.firstMatch(of: /scrcpy\s+(\d+\.\d+)/) {
-                let version = String(match.1)
-                AppLogger.process.info("✅ 获取到 scrcpy 版本 (两段式): \(version)")
-                return version
-            }
-
-            AppLogger.process.warning("无法从输出中解析版本号: \(result.stdout.prefix(200))")
-        } catch {
-            AppLogger.process.error("获取 scrcpy 版本失败: \(error.localizedDescription)")
-        }
-
-        // 默认返回与内置 scrcpy-server 匹配的版本号
-        // 内置的 scrcpy-server 版本是 3.3.4
-        let defaultVersion = "3.3.4"
-        AppLogger.process.warning("⚠️ 使用默认版本号: \(defaultVersion)")
-        return defaultVersion
+    /// 直接返回内置 scrcpy-server 的版本号
+    private func getScrcpyVersion() -> String {
+        Self.bundledScrcpyServerVersion
     }
 
     /// 启动进程监控

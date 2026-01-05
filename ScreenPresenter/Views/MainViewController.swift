@@ -351,11 +351,12 @@ final class MainViewController: NSViewController {
             return
         }
 
-        let scrcpyReady = appState.toolchainManager.scrcpyStatus.isReady
+        // 检查 scrcpy-server 是否可用
+        let scrcpyServerReady = appState.toolchainManager.scrcpyServerPath != nil
 
-        if !scrcpyReady {
-            panel.showToolchainMissing(toolName: "scrcpy") { [weak self] in
-                self?.installScrcpy()
+        if !scrcpyServerReady {
+            panel.showToolchainMissing(toolName: "scrcpy-server") { [weak self] in
+                self?.openPreferences()
             }
             panel.renderView.clearTexture()
         } else if appState.androidCapturing {
@@ -556,10 +557,10 @@ final class MainViewController: NSViewController {
         }
     }
 
-    private func installScrcpy() {
-        Task {
-            await AppState.shared.toolchainManager.installScrcpy()
-            updateUI()
+    private func openPreferences() {
+        // 打开偏好设置窗口的工具链标签页
+        if let delegate = NSApp.delegate as? AppDelegate {
+            delegate.showPreferences(self)
         }
     }
 
@@ -635,8 +636,8 @@ final class MainViewController: NSViewController {
     private func isPortInUseError(_ message: String) -> Bool {
         let lowercased = message.lowercased()
         return lowercased.contains("端口") && lowercased.contains("占用") ||
-               lowercased.contains("address already in use") ||
-               lowercased.contains("port") && lowercased.contains("in use")
+            lowercased.contains("address already in use") ||
+            lowercased.contains("port") && lowercased.contains("in use")
     }
 
     /// 显示带有"重置连接"选项的错误弹窗

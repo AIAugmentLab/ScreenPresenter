@@ -1266,17 +1266,6 @@ final class PreferencesViewController: NSViewController {
         divider1.boxType = .separator
         toolchainGroup.addArrangedSubview(divider1)
 
-        let scrcpyRow = createToolchainRowWithPath(
-            name: "scrcpy",
-            description: L10n.prefs.toolchain.scrcpyDesc,
-            toolType: .scrcpy
-        )
-        toolchainGroup.addArrangedSubview(scrcpyRow)
-
-        let divider2 = NSBox()
-        divider2.boxType = .separator
-        toolchainGroup.addArrangedSubview(divider2)
-
         let scrcpyServerRow = createToolchainRowWithPath(
             name: "scrcpy-server",
             description: L10n.prefs.toolchain.scrcpyServerDesc,
@@ -1528,98 +1517,6 @@ final class PreferencesViewController: NSViewController {
         return container
     }
 
-    private func createToolchainRow(name: String, description: String) -> NSView {
-        let rowStack = StackContainerView()
-        rowStack.axis = .horizontal
-        rowStack.alignment = .centerY
-        rowStack.spacing = 8
-        rowStack.fillsCrossAxis = true
-
-        // 状态图标
-        let statusIcon = NSImageView()
-        statusIcon.image = NSImage(systemSymbolName: "circle", accessibilityDescription: nil)
-        statusIcon.contentTintColor = .secondaryLabelColor
-        statusIcon.setFrameSize(NSSize(width: 18, height: 18))
-        rowStack.addArrangedSubview(statusIcon)
-
-        // 名称和描述
-        let infoStack = StackContainerView()
-        infoStack.axis = .vertical
-        infoStack.alignment = .leading
-        infoStack.spacing = 4
-        let nameLabel = NSTextField(labelWithString: name)
-        nameLabel.font = NSFont.systemFont(ofSize: 13)
-        infoStack.addArrangedSubview(nameLabel)
-        let descLabel = NSTextField(labelWithString: description)
-        descLabel.font = NSFont.systemFont(ofSize: 11)
-        descLabel.textColor = .secondaryLabelColor
-        infoStack.addArrangedSubview(descLabel)
-        infoStack.setFrameSize(NSSize(width: 200, height: infoStack.fittingSize.height))
-        rowStack.addArrangedSubview(infoStack)
-
-        // 占位
-        let spacer = FlexibleSpacerView()
-        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        rowStack.addArrangedSubview(spacer)
-
-        // 状态文本
-        let statusLabel = NSTextField(labelWithString: L10n.common.checking)
-        statusLabel.font = NSFont.systemFont(ofSize: 11)
-        statusLabel.textColor = .secondaryLabelColor
-        statusLabel.alignment = .right
-        rowStack.addArrangedSubview(statusLabel)
-
-        // 更新状态
-        Task { @MainActor in
-            let toolchain = AppState.shared.toolchainManager
-            let status: ToolchainStatus
-            let version: String
-
-            if name == "adb" {
-                status = toolchain.adbStatus
-                version = toolchain.adbVersionDescription
-            } else {
-                status = toolchain.scrcpyStatus
-                version = toolchain.scrcpyVersionDescription
-            }
-
-            switch status {
-            case .installed:
-                statusIcon.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
-                statusIcon.contentTintColor = .systemGreen
-                statusLabel.stringValue = version
-                statusLabel.textColor = .systemGreen
-            case .notInstalled:
-                statusIcon.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
-                statusIcon.contentTintColor = .systemOrange
-                statusLabel.stringValue = L10n.prefs.toolchain.notInstalled
-                statusLabel.textColor = .systemOrange
-            case .installing:
-                statusIcon.image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: nil)
-                statusIcon.contentTintColor = .appAccent
-                statusLabel.stringValue = L10n.common.checking
-            case let .error(message):
-                statusIcon.image = NSImage(
-                    systemSymbolName: "exclamationmark.circle.fill",
-                    accessibilityDescription: nil
-                )
-                statusIcon.contentTintColor = .systemRed
-                statusLabel.stringValue = message
-                statusLabel.textColor = .systemRed
-            }
-        }
-
-        return PaddingView(
-            contentView: rowStack,
-            insets: NSEdgeInsets(
-                top: LayoutMetrics.rowVerticalPadding,
-                left: 0,
-                bottom: LayoutMetrics.rowVerticalPadding,
-                right: 0
-            )
-        )
-    }
-
     private func createToolchainRowWithPath(name: String, description: String, toolType: ToolType) -> NSView {
         let containerStack = StackContainerView()
         containerStack.axis = .vertical
@@ -1744,19 +1641,16 @@ final class PreferencesViewController: NSViewController {
             case .adb:
                 status = toolchain.adbStatus
                 version = toolchain.adbVersionDescription
-            case .scrcpy:
-                status = toolchain.scrcpyStatus
-                version = toolchain.scrcpyVersionDescription
             case .scrcpyServer:
-                // scrcpy-server 使用 scrcpy 的状态，但显示路径信息
-                if let serverPath = toolchain.scrcpyServerPath {
+                // scrcpy-server 显示版本号
+                if toolchain.scrcpyServerPath != nil {
                     statusIcon.image = NSImage(
                         systemSymbolName: "checkmark.circle.fill",
                         accessibilityDescription: nil
                     )
                     statusIcon.contentTintColor = .systemGreen
-                    let fileName = (serverPath as NSString).lastPathComponent
-                    statusLabel.stringValue = fileName
+                    // 显示版本号
+                    statusLabel.stringValue = L10n.prefs.toolchain.bundled("3.3.4")
                     statusLabel.textColor = .systemGreen
                 } else {
                     statusIcon.image = NSImage(systemSymbolName: "xmark.circle", accessibilityDescription: nil)
@@ -1808,15 +1702,13 @@ final class PreferencesViewController: NSViewController {
     private func tagForToolType(_ toolType: ToolType, base: Int) -> Int {
         switch toolType {
         case .adb: base
-        case .scrcpy: base + 1
-        case .scrcpyServer: base + 2
+        case .scrcpyServer: base + 1
         }
     }
 
     private func useCustomPathForToolType(_ toolType: ToolType) -> Bool {
         switch toolType {
         case .adb: UserPreferences.shared.useCustomAdbPath
-        case .scrcpy: UserPreferences.shared.useCustomScrcpyPath
         case .scrcpyServer: UserPreferences.shared.useCustomScrcpyServerPath
         }
     }
@@ -1824,7 +1716,6 @@ final class PreferencesViewController: NSViewController {
     private func customPathForToolType(_ toolType: ToolType) -> String? {
         switch toolType {
         case .adb: UserPreferences.shared.customAdbPath
-        case .scrcpy: UserPreferences.shared.customScrcpyPath
         case .scrcpyServer: UserPreferences.shared.customScrcpyServerPath
         }
     }
@@ -1833,8 +1724,7 @@ final class PreferencesViewController: NSViewController {
         let offset = tag % 10
         switch offset {
         case 1: return .adb
-        case 2: return .scrcpy
-        case 3: return .scrcpyServer
+        case 2: return .scrcpyServer
         default: return nil
         }
     }
@@ -1922,7 +1812,6 @@ final class PreferencesViewController: NSViewController {
 
     private enum ToolType {
         case adb
-        case scrcpy
         case scrcpyServer
     }
 
@@ -2167,12 +2056,11 @@ final class PreferencesViewController: NSViewController {
     }
 
     @objc private func androidAudioCodecChanged(_ sender: NSPopUpButton) {
-        let codec: ScrcpyConfiguration.AudioCodec
-        switch sender.indexOfSelectedItem {
-        case 0: codec = .opus
-        case 1: codec = .aac
-        case 2: codec = .raw
-        default: codec = .opus
+        let codec: ScrcpyConfiguration.AudioCodec = switch sender.indexOfSelectedItem {
+        case 0: .opus
+        case 1: .aac
+        case 2: .raw
+        default: .opus
         }
         UserPreferences.shared.androidAudioCodec = codec
 
@@ -2229,8 +2117,6 @@ final class PreferencesViewController: NSViewController {
         switch toolType {
         case .adb:
             UserPreferences.shared.useCustomAdbPath = useCustom
-        case .scrcpy:
-            UserPreferences.shared.useCustomScrcpyPath = useCustom
         case .scrcpyServer:
             UserPreferences.shared.useCustomScrcpyServerPath = useCustom
         }
@@ -2269,8 +2155,6 @@ final class PreferencesViewController: NSViewController {
         switch toolType {
         case .adb:
             UserPreferences.shared.customAdbPath = path.isEmpty ? nil : path
-        case .scrcpy:
-            UserPreferences.shared.customScrcpyPath = path.isEmpty ? nil : path
         case .scrcpyServer:
             UserPreferences.shared.customScrcpyServerPath = path.isEmpty ? nil : path
         }
@@ -2296,7 +2180,6 @@ final class PreferencesViewController: NSViewController {
         guard let toolType = toolTypeFromTag(sender.tag) else { return }
         let toolName = switch toolType {
         case .adb: "adb"
-        case .scrcpy: "scrcpy"
         case .scrcpyServer: "scrcpy-server"
         }
 
@@ -2321,8 +2204,6 @@ final class PreferencesViewController: NSViewController {
             switch toolType {
             case .adb:
                 UserPreferences.shared.customAdbPath = path
-            case .scrcpy:
-                UserPreferences.shared.customScrcpyPath = path
             case .scrcpyServer:
                 UserPreferences.shared.customScrcpyServerPath = path
             }
@@ -2362,8 +2243,6 @@ final class PreferencesViewController: NSViewController {
         switch toolType {
         case .adb:
             UserPreferences.shared.customAdbPath = nil
-        case .scrcpy:
-            UserPreferences.shared.customScrcpyPath = nil
         case .scrcpyServer:
             UserPreferences.shared.customScrcpyServerPath = nil
         }

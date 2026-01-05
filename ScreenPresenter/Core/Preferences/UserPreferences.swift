@@ -51,10 +51,8 @@ final class UserPreferences {
         static let scrcpyCodec = "scrcpyCodec"
         // 自定义路径
         static let customAdbPath = "customAdbPath"
-        static let customScrcpyPath = "customScrcpyPath"
         static let customScrcpyServerPath = "customScrcpyServerPath"
         static let useCustomAdbPath = "useCustomAdbPath"
-        static let useCustomScrcpyPath = "useCustomScrcpyPath"
         static let useCustomScrcpyServerPath = "useCustomScrcpyServerPath"
         // 电源管理
         static let preventAutoLockDuringCapture = "preventAutoLockDuringCapture"
@@ -240,7 +238,7 @@ final class UserPreferences {
         let start = scrcpyPortRangeStart
         let end = scrcpyPortRangeEnd
         // 确保 start <= end
-        return min(start, end) ... max(start, end)
+        return min(start, end)...max(start, end)
     }
 
     /// scrcpy 编解码器（h264/h265，默认 h264）
@@ -271,18 +269,6 @@ final class UserPreferences {
         set { defaults.set(newValue, forKey: Keys.customAdbPath) }
     }
 
-    /// 是否使用自定义 scrcpy 路径
-    var useCustomScrcpyPath: Bool {
-        get { defaults.bool(forKey: Keys.useCustomScrcpyPath) }
-        set { defaults.set(newValue, forKey: Keys.useCustomScrcpyPath) }
-    }
-
-    /// 自定义 scrcpy 路径
-    var customScrcpyPath: String? {
-        get { defaults.string(forKey: Keys.customScrcpyPath) }
-        set { defaults.set(newValue, forKey: Keys.customScrcpyPath) }
-    }
-
     /// 是否使用自定义 scrcpy-server 路径
     var useCustomScrcpyServerPath: Bool {
         get { defaults.bool(forKey: Keys.useCustomScrcpyServerPath) }
@@ -294,9 +280,9 @@ final class UserPreferences {
         get { defaults.string(forKey: Keys.customScrcpyServerPath) }
         set { defaults.set(newValue, forKey: Keys.customScrcpyServerPath) }
     }
-    
+
     // MARK: - Audio Settings
-    
+
     /// iOS 音频是否启用（默认 true）
     var iosAudioEnabled: Bool {
         get {
@@ -310,7 +296,7 @@ final class UserPreferences {
             NotificationCenter.default.post(name: .audioSettingsDidChange, object: nil, userInfo: ["platform": "ios"])
         }
     }
-    
+
     /// iOS 音频音量 (0.0 - 1.0，默认 1.0)
     var iosAudioVolume: Float {
         get {
@@ -325,7 +311,7 @@ final class UserPreferences {
             NotificationCenter.default.post(name: .audioSettingsDidChange, object: nil, userInfo: ["platform": "ios"])
         }
     }
-    
+
     /// Android 音频是否启用（默认 false，需要用户手动启用）
     var androidAudioEnabled: Bool {
         get {
@@ -336,10 +322,14 @@ final class UserPreferences {
         }
         set {
             defaults.set(newValue, forKey: Keys.androidAudioEnabled)
-            NotificationCenter.default.post(name: .audioSettingsDidChange, object: nil, userInfo: ["platform": "android"])
+            NotificationCenter.default.post(
+                name: .audioSettingsDidChange,
+                object: nil,
+                userInfo: ["platform": "android"]
+            )
         }
     }
-    
+
     /// Android 音频音量 (0.0 - 1.0，默认 1.0)
     var androidAudioVolume: Float {
         get {
@@ -351,22 +341,31 @@ final class UserPreferences {
         }
         set {
             defaults.set(newValue, forKey: Keys.androidAudioVolume)
-            NotificationCenter.default.post(name: .audioSettingsDidChange, object: nil, userInfo: ["platform": "android"])
+            NotificationCenter.default.post(
+                name: .audioSettingsDidChange,
+                object: nil,
+                userInfo: ["platform": "android"]
+            )
         }
     }
 
     /// Android 音频编解码器（默认 opus）
     var androidAudioCodec: ScrcpyConfiguration.AudioCodec {
         get {
-            guard let rawValue = defaults.string(forKey: Keys.androidAudioCodec),
-                  let codec = ScrcpyConfiguration.AudioCodec(rawValue: rawValue) else {
+            guard
+                let rawValue = defaults.string(forKey: Keys.androidAudioCodec),
+                let codec = ScrcpyConfiguration.AudioCodec(rawValue: rawValue) else {
                 return .opus
             }
             return codec
         }
         set {
             defaults.set(newValue.rawValue, forKey: Keys.androidAudioCodec)
-            NotificationCenter.default.post(name: .audioSettingsDidChange, object: nil, userInfo: ["platform": "android", "codec": newValue.rawValue])
+            NotificationCenter.default.post(
+                name: .audioSettingsDidChange,
+                object: nil,
+                userInfo: ["platform": "android", "codec": newValue.rawValue]
+            )
         }
     }
 
