@@ -57,6 +57,11 @@ final class UserPreferences {
         static let useCustomScrcpyServerPath = "useCustomScrcpyServerPath"
         // 电源管理
         static let preventAutoLockDuringCapture = "preventAutoLockDuringCapture"
+        // 音频设置
+        static let iosAudioEnabled = "iosAudioEnabled"
+        static let iosAudioVolume = "iosAudioVolume"
+        static let androidAudioEnabled = "androidAudioEnabled"
+        static let androidAudioVolume = "androidAudioVolume"
     }
 
     // MARK: - UserDefaults
@@ -270,6 +275,66 @@ final class UserPreferences {
         get { defaults.string(forKey: Keys.customScrcpyServerPath) }
         set { defaults.set(newValue, forKey: Keys.customScrcpyServerPath) }
     }
+    
+    // MARK: - Audio Settings
+    
+    /// iOS 音频是否启用（默认 true）
+    var iosAudioEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.iosAudioEnabled) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Keys.iosAudioEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.iosAudioEnabled)
+            NotificationCenter.default.post(name: .audioSettingsDidChange, object: nil, userInfo: ["platform": "ios"])
+        }
+    }
+    
+    /// iOS 音频音量 (0.0 - 1.0，默认 1.0)
+    var iosAudioVolume: Float {
+        get {
+            let value = defaults.float(forKey: Keys.iosAudioVolume)
+            if value == 0, defaults.object(forKey: Keys.iosAudioVolume) == nil {
+                return 1.0
+            }
+            return value
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.iosAudioVolume)
+            NotificationCenter.default.post(name: .audioSettingsDidChange, object: nil, userInfo: ["platform": "ios"])
+        }
+    }
+    
+    /// Android 音频是否启用（默认 false，暂不支持）
+    var androidAudioEnabled: Bool {
+        get {
+            if defaults.object(forKey: Keys.androidAudioEnabled) == nil {
+                return false
+            }
+            return defaults.bool(forKey: Keys.androidAudioEnabled)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.androidAudioEnabled)
+            NotificationCenter.default.post(name: .audioSettingsDidChange, object: nil, userInfo: ["platform": "android"])
+        }
+    }
+    
+    /// Android 音频音量 (0.0 - 1.0，默认 1.0)
+    var androidAudioVolume: Float {
+        get {
+            let value = defaults.float(forKey: Keys.androidAudioVolume)
+            if value == 0, defaults.object(forKey: Keys.androidAudioVolume) == nil {
+                return 1.0
+            }
+            return value
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.androidAudioVolume)
+            NotificationCenter.default.post(name: .audioSettingsDidChange, object: nil, userInfo: ["platform": "android"])
+        }
+    }
 
     // MARK: - Private Init
 
@@ -288,6 +353,10 @@ final class UserPreferences {
             Keys.scrcpyShowTouches: false,
             Keys.scrcpyPort: 27183,
             Keys.scrcpyCodec: ScrcpyCodecType.h264.rawValue,
+            Keys.iosAudioEnabled: true,
+            Keys.iosAudioVolume: 1.0,
+            Keys.androidAudioEnabled: false,
+            Keys.androidAudioVolume: 1.0,
         ])
     }
 

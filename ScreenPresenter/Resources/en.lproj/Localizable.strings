@@ -97,6 +97,7 @@
 "prefs.section.appearance" = "Appearance";
 "prefs.section.layout" = "Layout";
 "prefs.section.frameRate" = "Frame Rate";
+"prefs.section.iosAudio" = "iOS Audio";
 "prefs.section.android" = "Android (Scrcpy)";
 "prefs.section.video" = "Video";
 "prefs.section.display" = "Display";
@@ -105,6 +106,11 @@
 "prefs.section.iosPermissions" = "iOS Permissions";
 "prefs.section.androidPermissions" = "Android Permissions";
 "prefs.section.androidToolchain" = "Android Toolchain";
+
+// MARK: - Preferences - Audio
+"prefs.audio.enableCapture" = "Enable Audio Capture";
+"prefs.audio.volume" = "Volume";
+"prefs.audio.iosNote" = "Audio capture requires iOS device connected via USB";
 
 // MARK: - Preferences - General
 "prefs.general.displaySettings" = "Display Settings";

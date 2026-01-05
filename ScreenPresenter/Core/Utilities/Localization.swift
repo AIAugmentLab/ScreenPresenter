@@ -277,6 +277,7 @@ enum L10n {
             static var appearance: String { "prefs.section.appearance".localized }
             static var layout: String { "prefs.section.layout".localized }
             static var frameRate: String { "prefs.section.frameRate".localized }
+            static var iosAudio: String { "prefs.section.iosAudio".localized }
             static var android: String { "prefs.section.android".localized }
             static var video: String { "prefs.section.video".localized }
             static var display: String { "prefs.section.display".localized }
@@ -322,6 +323,12 @@ enum L10n {
         enum capturePref {
             static var frameRate: String { "prefs.capture.frameRate".localized }
             static var frameRateNote: String { "prefs.capture.frameRateNote".localized }
+        }
+
+        enum audioPref {
+            static var enableCapture: String { "prefs.audio.enableCapture".localized }
+            static var volume: String { "prefs.audio.volume".localized }
+            static var iosNote: String { "prefs.audio.iosNote".localized }
         }
 
         enum scrcpyPref {

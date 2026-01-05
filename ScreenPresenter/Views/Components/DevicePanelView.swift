@@ -93,6 +93,11 @@ final class DevicePanelView: NSView {
     private var trackingArea: NSTrackingArea?
     private var isMouseInside: Bool = false
 
+    /// 隐藏延迟计时器（鼠标移出后延迟隐藏）
+    private var hideDelayTimer: Timer?
+    /// 隐藏延迟时间（秒）
+    private let hideDelayDuration: TimeInterval = 2.0
+
     // MARK: - FPS 更新定时器
 
     private var fpsUpdateTimer: Timer?
@@ -120,6 +125,8 @@ final class DevicePanelView: NSView {
         if let trackingArea {
             removeTrackingArea(trackingArea)
         }
+        cancelHideDelayTimer()
+        fpsUpdateTimer?.invalidate()
     }
 
     // MARK: - UI 设置
@@ -217,14 +224,40 @@ final class DevicePanelView: NSView {
     private func updateCaptureInfoVisibility() {
         guard currentState == .capturing else {
             captureInfoView.isHidden = true
+            cancelHideDelayTimer()
             return
         }
 
         if isMouseInside {
+            // 鼠标进入：立即取消所有隐藏计时器，立即显示
+            cancelHideDelayTimer()
+            captureInfoView.cancelAutoHide()
             captureInfoView.showAnimated(autoHide: false)
         } else {
-            captureInfoView.hideAnimated()
+            // 鼠标移出：如果已有 autoHide 定时器在运行（首次显示后的自动隐藏），不重复调度
+            // 只有在没有任何隐藏定时器运行时才启动延迟隐藏
+            if !captureInfoView.isAutoHideScheduled, hideDelayTimer == nil {
+                scheduleHideDelayTimer()
+            }
         }
+    }
+
+    /// 启动延迟隐藏计时器
+    private func scheduleHideDelayTimer() {
+        cancelHideDelayTimer()
+        hideDelayTimer = Timer.scheduledTimer(withTimeInterval: hideDelayDuration, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            // 隐藏前再次检查鼠标是否在区域内
+            if !self.isMouseInside {
+                self.captureInfoView.hideAnimated()
+            }
+        }
+    }
+
+    /// 取消延迟隐藏计时器
+    private func cancelHideDelayTimer() {
+        hideDelayTimer?.invalidate()
+        hideDelayTimer = nil
     }
 
     private func setupStatusContent() {
@@ -253,6 +286,17 @@ final class DevicePanelView: NSView {
 
         captureInfoView.onStopTapped = { [weak self] in
             self?.onStopAction?()
+        }
+
+        // 音频控制回调
+        captureInfoView.onAudioToggle = { enabled in
+            // 更新 iOS 设备源的音频状态
+            AppState.shared.iosDeviceSource?.isAudioEnabled = enabled
+        }
+
+        captureInfoView.onVolumeChange = { volume in
+            // 更新 iOS 设备源的音量
+            AppState.shared.iosDeviceSource?.audioVolume = volume
         }
     }
 
@@ -339,7 +383,7 @@ final class DevicePanelView: NSView {
     ) {
         // 记录之前是否在捕获状态（用于决定是否重新配置 bezel）
         let wasCapturing = currentState == .capturing
-        
+
         currentState = .connected
         currentPlatform = platform
         // 注意：不重置 currentCaptureResolution，以便保留最后的 aspectRatio
@@ -487,7 +531,7 @@ final class DevicePanelView: NSView {
             abs(resolution.height - currentCaptureResolution.height) > 1
 
         // 只有在收到有效分辨率且分辨率变化时才更新 bezel
-        if resolutionValid && (!wasCapturing || resolutionChanged) {
+        if resolutionValid, !wasCapturing || resolutionChanged {
             // 收到第一帧后，使用实际视频分辨率更新 bezel
             bezelView.updateAspectRatio(resolution.width / resolution.height)
             currentCaptureResolution = resolution
@@ -508,6 +552,9 @@ final class DevicePanelView: NSView {
 
         // 更新捕获状态文本：显示设备型号和名称
         updateCaptureStatusText()
+
+        // 设置平台以控制音频控件显示
+        captureInfoView.setPlatform(.ios)
 
         // 更新分辨率和 FPS
         captureInfoView.updateResolution(resolutionValid ? resolution : .zero)
@@ -566,7 +613,7 @@ final class DevicePanelView: NSView {
             abs(resolution.height - currentCaptureResolution.height) > 1
 
         // 只有在收到有效分辨率且分辨率变化时才更新 bezel
-        if resolutionValid && (!wasCapturing || resolutionChanged) {
+        if resolutionValid, !wasCapturing || resolutionChanged {
             // 收到第一帧后，使用实际视频分辨率更新 bezel
             bezelView.updateAspectRatio(resolution.width / resolution.height)
             currentCaptureResolution = resolution
@@ -587,6 +634,9 @@ final class DevicePanelView: NSView {
 
         // 更新捕获状态文本：显示设备型号和名称
         updateCaptureStatusText()
+
+        // 设置平台以控制音频控件显示
+        captureInfoView.setPlatform(platform)
 
         // 更新分辨率和 FPS
         captureInfoView.updateResolution(resolutionValid ? resolution : .zero)

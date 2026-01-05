@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		1A2B3C4D5E6F7890ABCDEF01 /* DeviceColorSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7890ABCDEF02 /* DeviceColorSettings.swift */; };
+		2A000001000000000001 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A000002000000000001 /* AudioPlayer.swift */; };
 		3D08D092E75081FC3BA6C7A9 /* IOSDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC7BD7E5F57E69F54F103E7C /* IOSDevice.swift */; };
 		5843D265B1DC87EEFE94E906 /* ColorCompensationPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E7E9FE2FF970D867ABAC3C4 /* ColorCompensationPanel.swift */; };
 		5ACB45AE4A9970E861B03E87 /* LUTGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20A91CABDC26BD9136D12E86 /* LUTGenerator.swift */; };
@@ -65,6 +66,7 @@
 		0A7A9976317BC37F1A5CA0E6 /* ColorCompensationFilter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ColorCompensationFilter.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F7890ABCDEF02 /* DeviceColorSettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeviceColorSettings.swift; sourceTree = "<group>"; };
 		20A91CABDC26BD9136D12E86 /* LUTGenerator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LUTGenerator.swift; sourceTree = "<group>"; };
+		2A000002000000000001 /* AudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayer.swift; sourceTree = "<group>"; };
 		2B30ECACCA0D38AE0236B0B8 /* FrameBuffer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FrameBuffer.swift; sourceTree = "<group>"; };
 		2C66B6DF8C1E31F829EDE370 /* IOSDeviceSource.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = IOSDeviceSource.swift; sourceTree = "<group>"; };
 		3E7E9FE2FF970D867ABAC3C4 /* ColorCompensationPanel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ColorCompensationPanel.swift; sourceTree = "<group>"; };
@@ -246,6 +248,7 @@
 			isa = PBXGroup;
 			children = (
 				B1000002000000000001 /* AppState.swift */,
+				2A000003000000000001 /* Audio */,
 				A44133052EF93201003DCDD3 /* DeviceDiscovery */,
 				B1000003000000000010 /* DeviceInsight */,
 				A44133092EF93201003DCDD3 /* DeviceSource */,
@@ -255,6 +258,14 @@
 				A44133202EF93201003DCDD3 /* Utilities */,
 			);
 			path = Core;
+			sourceTree = "<group>";
+		};
+		2A000003000000000001 /* Audio */ = {
+			isa = PBXGroup;
+			children = (
+				2A000002000000000001 /* AudioPlayer.swift */,
+			);
+			path = Audio;
 			sourceTree = "<group>";
 		};
 		A44133252EF93201003DCDD3 /* Resources */ = {
@@ -445,6 +456,7 @@
 				5843D265B1DC87EEFE94E906 /* ColorCompensationPanel.swift in Sources */,
 				C0025E2AB0327BD165380C0C /* FrameBuffer.swift in Sources */,
 				A481F7992F0B579F00D9DAB0 /* FramePipeline.swift in Sources */,
+				2A000001000000000001 /* AudioPlayer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

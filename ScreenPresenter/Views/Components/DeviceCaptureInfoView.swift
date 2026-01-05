@@ -32,6 +32,17 @@ final class DeviceCaptureInfoView: NSView {
     /// 顶部状态栏（captureIndicator + fpsLabel）
     private let topStatusBar = NSView()
 
+    // MARK: - 音频控制 UI
+
+    /// 音频控制容器
+    private let audioControlContainer = NSView()
+    /// 音频开关按钮
+    private let audioToggleButton = NSButton()
+    /// 音量滑块
+    private let volumeSlider = NSSlider()
+    /// 音量标签
+    private let volumeLabel = NSTextField(labelWithString: "")
+
     // MARK: - 字体配置
 
     /// 设备名称标签的基准字体大小
@@ -43,15 +54,22 @@ final class DeviceCaptureInfoView: NSView {
     /// 设备名称标签的最小字体大小
     private let deviceInfoMinFontSize: CGFloat = 10
 
+    // MARK: - 平台
+
+    /// 当前设备平台
+    private var currentPlatform: DevicePlatform = .ios
+
     // MARK: - 回调
 
     var onStopTapped: (() -> Void)?
+    var onAudioToggle: ((Bool) -> Void)?
+    var onVolumeChange: ((Float) -> Void)?
 
     // MARK: - 自动隐藏
 
     private var autoHideTimer: Timer?
     /// 自动隐藏延时（秒）
-    private let autoHideDelay: TimeInterval = 3.0
+    private let autoHideDelay: TimeInterval = 2.0
 
     // MARK: - 初始化
 
@@ -78,6 +96,7 @@ final class DeviceCaptureInfoView: NSView {
         setupContentContainer()
         setupTopStatusBar()
         setupDeviceLabels()
+        setupAudioControls()
         setupStopButton()
     }
 
@@ -120,6 +139,42 @@ final class DeviceCaptureInfoView: NSView {
         deviceInfoLabel.maximumNumberOfLines = 2
         deviceInfoLabel.cell?.truncatesLastVisibleLine = true
         contentContainer.addSubview(deviceInfoLabel)
+    }
+
+    private func setupAudioControls() {
+        // 音频控制容器
+        audioControlContainer.wantsLayer = true
+        audioControlContainer.layer?.cornerRadius = 8
+        audioControlContainer.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.1).cgColor
+        contentContainer.addSubview(audioControlContainer)
+
+        // 音频开关按钮
+        audioToggleButton.bezelStyle = .inline
+        audioToggleButton.isBordered = false
+        audioToggleButton.image = NSImage(systemSymbolName: "speaker.wave.2.fill", accessibilityDescription: "音频")
+        audioToggleButton.contentTintColor = .white
+        audioToggleButton.target = self
+        audioToggleButton.action = #selector(audioToggleTapped)
+        audioControlContainer.addSubview(audioToggleButton)
+
+        // 音量滑块
+        volumeSlider.minValue = 0
+        volumeSlider.maxValue = 1
+        volumeSlider.doubleValue = 1
+        volumeSlider.target = self
+        volumeSlider.action = #selector(volumeSliderChanged)
+        volumeSlider.controlSize = .small
+        audioControlContainer.addSubview(volumeSlider)
+
+        // 音量标签
+        volumeLabel.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
+        volumeLabel.textColor = NSColor.white.withAlphaComponent(0.8)
+        volumeLabel.alignment = .right
+        volumeLabel.stringValue = "100%"
+        audioControlContainer.addSubview(volumeLabel)
+
+        // 默认隐藏音频控制（等待设置平台后显示）
+        audioControlContainer.isHidden = true
     }
 
     private func setupStopButton() {
@@ -221,11 +276,17 @@ final class DeviceCaptureInfoView: NSView {
         let deviceNameWidth = availableWidth
         let deviceInfoWidth = availableWidth
 
-        let contentWidth = max(topStatusWidth, resolutionWidth, deviceNameWidth, deviceInfoWidth, 48)
+        // 音频控件尺寸
+        let audioControlHeight: CGFloat = audioControlContainer.isHidden ? 0 : 32
+        let audioControlWidth: CGFloat = min(availableWidth, 200)
+
+        let contentWidth = max(topStatusWidth, resolutionWidth, deviceNameWidth, deviceInfoWidth, audioControlWidth, 48)
+        let audioSpacing: CGFloat = audioControlContainer.isHidden ? 0 : 16
         let totalHeight = topStatusHeight + 20
             + resolutionHeight + 16
             + deviceNameSize.height + 16
-            + deviceInfoSize.height + 24
+            + deviceInfoSize.height + audioSpacing
+            + audioControlHeight + 24
             + 48
 
         contentContainer.frame = CGRect(
@@ -283,6 +344,45 @@ final class DeviceCaptureInfoView: NSView {
             width: deviceInfoWidth,
             height: deviceInfoSize.height
         )
+
+        // 音频控件
+        if !audioControlContainer.isHidden {
+            y -= audioSpacing
+            y -= audioControlHeight
+            audioControlContainer.frame = CGRect(
+                x: (contentWidth - audioControlWidth) / 2,
+                y: y,
+                width: audioControlWidth,
+                height: audioControlHeight
+            )
+
+            // 布局音频控件内部元素
+            let buttonSize: CGFloat = 24
+            let sliderWidth: CGFloat = audioControlWidth - buttonSize - 50 - 16 // 按钮 + 标签 + 间距
+            let labelWidth: CGFloat = 40
+
+            audioToggleButton.frame = CGRect(
+                x: 8,
+                y: (audioControlHeight - buttonSize) / 2,
+                width: buttonSize,
+                height: buttonSize
+            )
+
+            volumeSlider.frame = CGRect(
+                x: 8 + buttonSize + 8,
+                y: (audioControlHeight - 20) / 2,
+                width: sliderWidth,
+                height: 20
+            )
+
+            volumeLabel.frame = CGRect(
+                x: audioControlWidth - labelWidth - 8,
+                y: (audioControlHeight - 16) / 2,
+                width: labelWidth,
+                height: 16
+            )
+        }
+
         y -= 24
 
         // 停止按钮（底部）
@@ -391,7 +491,75 @@ final class DeviceCaptureInfoView: NSView {
         autoHideTimer = nil
     }
 
+    /// 检查自动隐藏定时器是否正在运行
+    var isAutoHideScheduled: Bool {
+        autoHideTimer != nil
+    }
+
+    // MARK: - 音频控制
+
+    /// 设置当前设备平台，决定是否显示音频控件
+    /// - Parameter platform: 设备平台类型
+    func setPlatform(_ platform: DevicePlatform) {
+        currentPlatform = platform
+
+        // 目前只有 iOS 支持音频捕获
+        let supportsAudio = (platform == .ios)
+        audioControlContainer.isHidden = !supportsAudio
+
+        if supportsAudio {
+            // 从偏好设置加载初始状态
+            let enabled = UserPreferences.shared.iosAudioEnabled
+            let volume = UserPreferences.shared.iosAudioVolume
+            updateAudioState(enabled: enabled, volume: volume)
+        }
+
+        needsLayout = true
+    }
+
+    /// 更新音频控件状态
+    /// - Parameters:
+    ///   - enabled: 音频是否启用
+    ///   - volume: 音量 (0.0 - 1.0)
+    func updateAudioState(enabled: Bool, volume: Float) {
+        let iconName = enabled ? "speaker.wave.2.fill" : "speaker.slash.fill"
+        audioToggleButton.image = NSImage(systemSymbolName: iconName, accessibilityDescription: nil)
+        audioToggleButton.contentTintColor = enabled ? .systemBlue : .secondaryLabelColor
+
+        volumeSlider.floatValue = volume
+        volumeSlider.isEnabled = enabled
+
+        let volumePercent = Int(volume * 100)
+        volumeLabel.stringValue = "\(volumePercent)%"
+        volumeLabel.textColor = enabled ? .secondaryLabelColor : .tertiaryLabelColor
+    }
+
     // MARK: - 操作
+
+    @objc private func audioToggleTapped() {
+        guard currentPlatform == .ios else { return }
+
+        // 切换音频状态
+        let newEnabled = !UserPreferences.shared.iosAudioEnabled
+        UserPreferences.shared.iosAudioEnabled = newEnabled
+
+        let volume = UserPreferences.shared.iosAudioVolume
+        updateAudioState(enabled: newEnabled, volume: volume)
+
+        onAudioToggle?(newEnabled)
+    }
+
+    @objc private func volumeSliderChanged() {
+        guard currentPlatform == .ios else { return }
+
+        let volume = volumeSlider.floatValue
+        UserPreferences.shared.iosAudioVolume = volume
+
+        let volumePercent = Int(volume * 100)
+        volumeLabel.stringValue = "\(volumePercent)%"
+
+        onVolumeChange?(volume)
+    }
 
     @objc private func stopTapped() {
         onStopTapped?()

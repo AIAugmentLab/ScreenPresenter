@@ -34,16 +34,44 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
 
     private var captureSession: AVCaptureSession?
     private var videoOutput: AVCaptureVideoDataOutput?
+    private var audioOutput: AVCaptureAudioDataOutput?
     private let captureQueue = DispatchQueue(label: "com.screenPresenter.ios.capture", qos: .userInteractive)
+    private let audioQueue = DispatchQueue(label: "com.screenPresenter.ios.audio", qos: .userInteractive)
 
     /// 视频输出代理
     private var videoDelegate: VideoCaptureDelegate?
+
+    /// 音频输出代理
+    private var audioDelegate: AudioCaptureDelegate?
+
+    /// 音频播放器
+    private var audioPlayer: AudioPlayer?
 
     /// 是否正在捕获（使用线程安全的原子操作）
     private let capturingLock = OSAllocatedUnfairLock(initialState: false)
 
     /// 帧回调
     var onFrame: ((CVPixelBuffer) -> Void)?
+
+    // MARK: - 音频控制
+
+    /// 是否启用音频（从偏好设置读取）
+    var isAudioEnabled: Bool {
+        get { UserPreferences.shared.iosAudioEnabled }
+        set {
+            UserPreferences.shared.iosAudioEnabled = newValue
+            updateAudioPlayback()
+        }
+    }
+
+    /// 音量 (0.0 - 1.0)
+    var audioVolume: Float {
+        get { UserPreferences.shared.iosAudioVolume }
+        set {
+            UserPreferences.shared.iosAudioVolume = newValue
+            audioPlayer?.volume = newValue
+        }
+    }
 
     // MARK: - 初始化
 
@@ -104,10 +132,16 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
         // 移除通知监听
         NotificationCenter.default.removeObserver(self)
 
+        // 清理音频
+        audioPlayer?.stop()
+        audioPlayer = nil
+
         captureSession?.stopRunning()
         captureSession = nil
         videoOutput = nil
+        audioOutput = nil
         videoDelegate = nil
+        audioDelegate = nil
         onFrame = nil
 
         lastCaptureSize = .zero
@@ -128,7 +162,7 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
 
         // ⚠️ 重要：在启动会话之前设置标志，避免竞态条件
         capturingLock.withLock { $0 = true }
-        lastCaptureSize = .zero  // 重置尺寸以便重新检测
+        lastCaptureSize = .zero // 重置尺寸以便重新检测
 
         // 在后台线程启动会话
         await withCheckedContinuation { continuation in
@@ -244,11 +278,78 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
         session.addOutput(videoOutput)
         AppLogger.capture.info("✅ 视频输出已添加到会话")
 
+        // 添加音频输入和输出
+        setupAudioCapture(for: session, videoDevice: captureDevice)
+
         captureSession = session
         self.videoOutput = videoOutput
         videoDelegate = delegate
 
         AppLogger.capture.info("iOS 捕获会话已配置: \(iosDevice.name)")
+    }
+
+    // MARK: - 音频捕获设置
+
+    /// 设置音频捕获
+    /// iOS 设备通过 CoreMediaIO 暴露时，通常是 muxed 类型（同时包含视频和音频）
+    private func setupAudioCapture(for session: AVCaptureSession, videoDevice: AVCaptureDevice) {
+        // iOS 设备通过 CoreMediaIO 暴露时，通常是 muxed 类型（同时包含视频和音频）
+        // 检查是否支持 muxed 或 audio
+        let supportsMuxed = videoDevice.hasMediaType(.muxed)
+        let supportsAudio = videoDevice.hasMediaType(.audio)
+
+        AppLogger.capture.info("[Audio] 设备音频支持: muxed=\(supportsMuxed), audio=\(supportsAudio)")
+
+        guard supportsMuxed || supportsAudio else {
+            AppLogger.capture.info("[Audio] 设备不支持音频捕获")
+            return
+        }
+
+        // 直接添加音频输出到会话
+        // 对于 muxed 设备，音频和视频共享同一个输入，但可以有独立的输出
+        let audioOutput = AVCaptureAudioDataOutput()
+        let audioDelegate = AudioCaptureDelegate { [weak self] sampleBuffer in
+            self?.handleAudioSampleBuffer(sampleBuffer)
+        }
+        audioOutput.setSampleBufferDelegate(audioDelegate, queue: audioQueue)
+
+        guard session.canAddOutput(audioOutput) else {
+            AppLogger.capture.warning("[Audio] 无法添加音频输出到会话")
+            return
+        }
+
+        session.addOutput(audioOutput)
+        self.audioOutput = audioOutput
+        self.audioDelegate = audioDelegate
+
+        // 创建音频播放器
+        audioPlayer = AudioPlayer()
+        audioPlayer?.volume = audioVolume
+        audioPlayer?.isMuted = !isAudioEnabled
+
+        AppLogger.capture.info("[Audio] ✅ 音频捕获已启用")
+    }
+
+    // MARK: - 音频处理
+
+    /// 音频采样计数（用于日志）
+    private var audioSampleCount = 0
+
+    /// 处理音频采样缓冲
+    private func handleAudioSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
+        // 检查捕获状态
+        let isCapturing = capturingLock.withLock { $0 }
+        guard isCapturing, isAudioEnabled else { return }
+
+        // 使用 autoreleasepool 避免内存累积
+        autoreleasepool {
+            audioPlayer?.processSampleBuffer(sampleBuffer)
+        }
+    }
+
+    /// 更新音频播放状态
+    private func updateAudioPlayback() {
+        audioPlayer?.isMuted = !isAudioEnabled
     }
 
     // MARK: - 帧处理
@@ -327,7 +428,7 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
 
             if let range = bestFrameRateRange {
                 // 目标帧率在支持范围内，直接设置
-                if range.minFrameRate <= Double(targetFps) && Double(targetFps) <= range.maxFrameRate {
+                if range.minFrameRate <= Double(targetFps), Double(targetFps) <= range.maxFrameRate {
                     device.activeVideoMinFrameDuration = targetDuration
                     device.activeVideoMaxFrameDuration = targetDuration
                     AppLogger.capture.info("iOS 帧率已配置: \(targetFps) fps")
@@ -351,6 +452,25 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
 // MARK: - 视频捕获代理
 
 private final class VideoCaptureDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+    private let handler: (CMSampleBuffer) -> Void
+
+    init(handler: @escaping (CMSampleBuffer) -> Void) {
+        self.handler = handler
+        super.init()
+    }
+
+    func captureOutput(
+        _: AVCaptureOutput,
+        didOutput sampleBuffer: CMSampleBuffer,
+        from _: AVCaptureConnection
+    ) {
+        handler(sampleBuffer)
+    }
+}
+
+// MARK: - 音频捕获代理
+
+private final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     private let handler: (CMSampleBuffer) -> Void
 
     init(handler: @escaping (CMSampleBuffer) -> Void) {

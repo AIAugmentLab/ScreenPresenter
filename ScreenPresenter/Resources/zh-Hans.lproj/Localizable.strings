@@ -97,6 +97,7 @@
 "prefs.section.appearance" = "外观";
 "prefs.section.layout" = "布局";
 "prefs.section.frameRate" = "帧率";
+"prefs.section.iosAudio" = "iOS 音频";
 "prefs.section.android" = "Android (Scrcpy)";
 "prefs.section.video" = "视频";
 "prefs.section.display" = "显示";
@@ -105,6 +106,11 @@
 "prefs.section.iosPermissions" = "iOS 权限";
 "prefs.section.androidPermissions" = "Android 权限";
 "prefs.section.androidToolchain" = "Android 工具链";
+
+// MARK: - Preferences - Audio
+"prefs.audio.enableCapture" = "启用音频捕获";
+"prefs.audio.volume" = "音量";
+"prefs.audio.iosNote" = "音频捕获需要通过 USB 连接 iOS 设备";
 
 // MARK: - Preferences - General
 "prefs.general.displaySettings" = "显示设置";

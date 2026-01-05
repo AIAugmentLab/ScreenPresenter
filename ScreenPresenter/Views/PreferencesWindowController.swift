@@ -838,7 +838,10 @@ final class PreferencesViewController: NSViewController {
         addSettingsGroup(powerGroup, to: stackView)
 
         // 颜色补偿设置组
-        let colorCompGroup = createSettingsGroup(title: L10n.prefs.colorCompensationPref.sectionTitle, icon: "paintpalette")
+        let colorCompGroup = createSettingsGroup(
+            title: L10n.prefs.colorCompensationPref.sectionTitle,
+            icon: "paintpalette"
+        )
 
         // 单行：标签 + 按钮 + 开关
         addGroupRow(colorCompGroup, createLabeledRow(label: L10n.prefs.colorCompensationPref.enableSwitch) {
@@ -847,11 +850,19 @@ final class PreferencesViewController: NSViewController {
             container.alignment = .centerY
             container.spacing = 8
 
-            let button = NSButton(title: L10n.prefs.colorCompensationPref.openPanel, target: self, action: #selector(self.openColorCompensationPanel(_:)))
+            let button = NSButton(
+                title: L10n.prefs.colorCompensationPref.openPanel,
+                target: self,
+                action: #selector(self.openColorCompensationPanel(_:))
+            )
             button.bezelStyle = .rounded
             container.addArrangedSubview(button)
 
-            let checkbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(self.colorCompensationEnabledChanged(_:)))
+            let checkbox = NSButton(
+                checkboxWithTitle: "",
+                target: self,
+                action: #selector(self.colorCompensationEnabledChanged(_:))
+            )
             checkbox.state = ColorProfileManager.shared.isEnabled ? .on : .off
             checkbox.setContentHuggingPriority(.required, for: .horizontal)
             checkbox.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -959,6 +970,63 @@ final class PreferencesViewController: NSViewController {
         )
         addGroupRow(frameRateGroup, noteContainer, addDivider: false)
         addSettingsGroup(frameRateGroup, to: stackView)
+
+        // iOS 音频设置组
+        let iosAudioGroup = createSettingsGroup(title: L10n.prefs.section.iosAudio, icon: "speaker.wave.2.fill")
+
+        // 启用音频捕获
+        addGroupRow(iosAudioGroup, createCheckboxRow(
+            label: L10n.prefs.audioPref.enableCapture,
+            isOn: UserPreferences.shared.iosAudioEnabled,
+            action: #selector(iosAudioEnabledChanged(_:))
+        ) { checkbox in
+            checkbox.tag = 4001
+        })
+
+        // 音量控制
+        addGroupRow(iosAudioGroup, createLabeledRow(label: L10n.prefs.audioPref.volume) {
+            let stack = StackContainerView()
+            stack.axis = .horizontal
+            stack.alignment = .centerY
+            stack.spacing = 8
+
+            let slider = NSSlider()
+            slider.minValue = 0
+            slider.maxValue = 1
+            slider.doubleValue = Double(UserPreferences.shared.iosAudioVolume)
+            slider.target = self
+            slider.action = #selector(self.iosAudioVolumeChanged(_:))
+            slider.tag = 4002
+            slider.setFrameSize(NSSize(width: 200, height: slider.intrinsicContentSize.height))
+            slider.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+            stack.addArrangedSubview(slider)
+
+            let label = FixedSizeTextField(labelWithString: "\(Int(UserPreferences.shared.iosAudioVolume * 100))%")
+            label.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+            label.alignment = .right
+            label.tag = 4003
+            label.preferredWidth = 40
+            stack.addArrangedSubview(label)
+
+            return stack
+        }, addDivider: false)
+
+        // iOS 音频说明
+        let iosAudioNote = NSTextField(labelWithString: L10n.prefs.audioPref.iosNote)
+        iosAudioNote.font = NSFont.systemFont(ofSize: 11)
+        iosAudioNote.textColor = .secondaryLabelColor
+        let iosAudioNoteContainer = PaddingView(
+            contentView: iosAudioNote,
+            insets: NSEdgeInsets(
+                top: 0,
+                left: 0,
+                bottom: LayoutMetrics.rowVerticalPadding,
+                right: 0
+            )
+        )
+        addGroupRow(iosAudioGroup, iosAudioNoteContainer, addDivider: false)
+
+        addSettingsGroup(iosAudioGroup, to: stackView)
 
         // Android (Scrcpy) 设置组
         let androidGroup = createSettingsGroup(title: L10n.prefs.section.android, icon: "apps.iphone")
@@ -1321,7 +1389,7 @@ final class PreferencesViewController: NSViewController {
         helpText: String? = nil,
         configure: ((NSButton) -> Void)? = nil
     ) -> NSView {
-        if let helpText = helpText {
+        if let helpText {
             // 带帮助文本的版本
             let container = StackContainerView()
             container.axis = .vertical
@@ -1969,6 +2037,29 @@ final class PreferencesViewController: NSViewController {
         UserPreferences.shared.scrcpyCodec = ScrcpyCodecType.allCases[index]
     }
 
+    // MARK: - iOS 音频设置
+
+    @objc private func iosAudioEnabledChanged(_ sender: NSButton) {
+        let enabled = sender.state == .on
+        UserPreferences.shared.iosAudioEnabled = enabled
+
+        // 更新当前正在捕获的设备源
+        AppState.shared.iosDeviceSource?.isAudioEnabled = enabled
+    }
+
+    @objc private func iosAudioVolumeChanged(_ sender: NSSlider) {
+        let volume = Float(sender.doubleValue)
+        UserPreferences.shared.iosAudioVolume = volume
+
+        // 更新当前正在捕获的设备源
+        AppState.shared.iosDeviceSource?.audioVolume = volume
+
+        // 更新标签
+        if let label = sender.superview?.subviews.first(where: { $0.tag == 4003 }) as? NSTextField {
+            label.stringValue = "\(Int(volume * 100))%"
+        }
+    }
+
     @objc private func refreshToolchain() {
         Task {
             await AppState.shared.toolchainManager.refresh()
@@ -2187,4 +2278,5 @@ extension Notification.Name {
     static let deviceBezelVisibilityDidChange = Notification.Name("deviceBezelVisibilityDidChange")
     static let layoutModeDidChange = Notification.Name("layoutModeDidChange")
     static let preventAutoLockSettingDidChange = Notification.Name("preventAutoLockSettingDidChange")
+    static let audioSettingsDidChange = Notification.Name("audioSettingsDidChange")
 }
