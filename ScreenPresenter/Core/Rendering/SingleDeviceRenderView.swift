@@ -59,7 +59,51 @@ final class SingleDeviceRenderView: NSView {
     // MARK: - 统计
 
     private var frameTimestamps: [CFAbsoluteTime] = []
-    private(set) var fps: Double = 0
+    private var _fps: Double = 0
+    private let fpsLock = NSLock()
+    
+    /// 当前 FPS（线程安全）
+    var fps: Double {
+        get {
+            fpsLock.lock()
+            defer { fpsLock.unlock() }
+            return _fps
+        }
+        set {
+            fpsLock.lock()
+            _fps = newValue
+            fpsLock.unlock()
+        }
+    }
+    
+    // MARK: - 调试统计
+    
+    /// 渲染次数（周期内）
+    private var renderCountInPeriod: Int = 0
+    
+    /// 纹理更新次数（周期内）
+    private var textureUpdateCountInPeriod: Int = 0
+    
+    /// 上次统计时间
+    private var lastRenderStatsTime = CFAbsoluteTimeGetCurrent()
+    
+    /// 渲染耗时累计
+    private var totalRenderTime: Double = 0
+    
+    /// 最大渲染耗时
+    private var maxRenderTime: Double = 0
+    
+    /// 纹理更新耗时累计
+    private var totalTextureUpdateTime: Double = 0
+    
+    /// 最大纹理更新耗时
+    private var maxTextureUpdateTime: Double = 0
+    
+    /// 纹理更新间隔
+    private var lastTextureUpdateTime = CFAbsoluteTimeGetCurrent()
+    
+    /// 最大纹理更新间隔
+    private var maxTextureUpdateInterval: Double = 0
 
     // MARK: - 初始化
 
@@ -90,6 +134,11 @@ final class SingleDeviceRenderView: NSView {
         layer.framebufferOnly = true
         layer.isOpaque = false
         layer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2.0
+        // 禁用 vsync 等待，允许帧立即呈现
+        // 这可以减少延迟，但可能导致撕裂（在投屏场景中可接受）
+        layer.presentsWithTransaction = false
+        // 允许 triple buffering 以提高吞吐量
+        layer.maximumDrawableCount = 3
         return layer
     }
 
@@ -227,7 +276,10 @@ final class SingleDeviceRenderView: NSView {
         guard isRendering else { return }
         needsRender = true
         renderQueue.async { [weak self] in
-            self?.renderIfNeeded()
+            // 使用 autoreleasepool 确保每帧渲染过程中创建的临时对象及时释放
+            autoreleasepool {
+                self?.renderIfNeeded()
+            }
         }
     }
 
@@ -240,6 +292,8 @@ final class SingleDeviceRenderView: NSView {
     // MARK: - 纹理更新
 
     func updateTexture(from pixelBuffer: CVPixelBuffer) {
+        let updateStartTime = CFAbsoluteTimeGetCurrent()
+        
         guard isRendering, let cache = textureCache else { return }
 
         let width = CVPixelBufferGetWidth(pixelBuffer)
@@ -275,6 +329,33 @@ final class SingleDeviceRenderView: NSView {
         frameTimestamps.append(now)
         frameTimestamps = frameTimestamps.filter { now - $0 < 1.0 }
         fps = Double(frameTimestamps.count)
+        
+        // 调试统计
+        let updateTime = (now - updateStartTime) * 1000
+        textureUpdateCountInPeriod += 1
+        totalTextureUpdateTime += updateTime
+        maxTextureUpdateTime = max(maxTextureUpdateTime, updateTime)
+        
+        // 计算更新间隔（保留用于内部统计）
+        let updateInterval = (now - lastTextureUpdateTime) * 1000
+        if textureUpdateCountInPeriod > 1 {
+            maxTextureUpdateInterval = max(maxTextureUpdateInterval, updateInterval)
+        }
+        lastTextureUpdateTime = now
+        
+        // 每 5 秒重置统计（保留内部统计逻辑，移除日志输出）
+        let elapsed = now - lastRenderStatsTime
+        if elapsed >= 5.0 {
+            // 重置统计
+            lastRenderStatsTime = now
+            textureUpdateCountInPeriod = 0
+            renderCountInPeriod = 0
+            totalTextureUpdateTime = 0
+            maxTextureUpdateTime = 0
+            totalRenderTime = 0
+            maxRenderTime = 0
+            maxTextureUpdateInterval = 0
+        }
 
         // 触发渲染
         scheduleRender()
@@ -301,6 +382,8 @@ final class SingleDeviceRenderView: NSView {
     // MARK: - 渲染
 
     private func renderFrame() {
+        let renderStartTime = CFAbsoluteTimeGetCurrent()
+        
         guard let metalLayer, let commandQueue, let pipelineState, let samplerState else { return }
 
         let drawableSize = metalLayer.drawableSize
@@ -367,6 +450,12 @@ final class SingleDeviceRenderView: NSView {
         encoder.endEncoding()
         commandBuffer.present(drawable)
         commandBuffer.commit()
+        
+        // 统计渲染耗时
+        let renderTime = (CFAbsoluteTimeGetCurrent() - renderStartTime) * 1000
+        renderCountInPeriod += 1
+        totalRenderTime += renderTime
+        maxRenderTime = max(maxRenderTime, renderTime)
     }
 
     // MARK: - 着色器

@@ -337,22 +337,30 @@ final class DevicePanelView: NSView {
         onStart: @escaping () -> Void,
         onRefresh: ((@escaping () -> Void) -> Void)? = nil
     ) {
+        // 记录之前是否在捕获状态（用于决定是否重新配置 bezel）
+        let wasCapturing = currentState == .capturing
+        
         currentState = .connected
         currentPlatform = platform
-        currentCaptureResolution = .zero
+        // 注意：不重置 currentCaptureResolution，以便保留最后的 aspectRatio
         onStartAction = onStart
         onRefreshAction = onRefresh
         currentUserPrompt = userPrompt
         stopFPSUpdateTimer()
 
-        // 配置边框：优先使用设备实例精确识别
-        if let device = iosDevice {
-            configureBezel(for: device)
-        } else if let device = androidDevice {
-            configureBezel(for: device)
-        } else {
-            configureBezel(for: platform, deviceName: deviceName)
+        // 配置边框：
+        // - 如果之前在捕获状态（停止投屏），保留当前的 aspectRatio，避免位置跳动
+        // - 如果之前不在捕获状态（新连接设备），使用设备默认值配置
+        if !wasCapturing {
+            if let device = iosDevice {
+                configureBezel(for: device)
+            } else if let device = androidDevice {
+                configureBezel(for: device)
+            } else {
+                configureBezel(for: platform, deviceName: deviceName)
+            }
         }
+        // 如果是从捕获状态切换过来，保留当前 bezel 的 aspectRatio，不重新配置
 
         // 隐藏渲染视图，显示状态容器
         renderView.isHidden = true
@@ -473,22 +481,18 @@ final class DevicePanelView: NSView {
 
         // 更新 bezel：
         // - resolution 有效时（收到第一帧后）：使用实际分辨率的 aspectRatio
-        // - resolution 无效时（未收到帧）：使用设备默认的 aspectRatio
+        // - resolution 无效时（未收到帧）：保留当前 bezel 配置，避免位置跳动
         let resolutionValid = resolution.width > 0 && resolution.height > 0
         let resolutionChanged = abs(resolution.width - currentCaptureResolution.width) > 1 ||
             abs(resolution.height - currentCaptureResolution.height) > 1
 
-        // 只有在分辨率变化时才更新 bezel（避免重复配置）
-        if !wasCapturing || resolutionChanged {
-            if resolutionValid {
-                // 收到第一帧后，使用实际视频分辨率更新 bezel
-                bezelView.updateAspectRatio(resolution.width / resolution.height)
-            } else if !wasCapturing {
-                // 首次进入捕获状态但还没收到帧，使用设备默认值配置 bezel
-                configureBezel(for: device, aspectRatio: nil)
-            }
+        // 只有在收到有效分辨率且分辨率变化时才更新 bezel
+        if resolutionValid && (!wasCapturing || resolutionChanged) {
+            // 收到第一帧后，使用实际视频分辨率更新 bezel
+            bezelView.updateAspectRatio(resolution.width / resolution.height)
             currentCaptureResolution = resolution
         }
+        // 注意：如果还没收到帧，保留当前 bezel 的 aspectRatio，不重新配置
 
         // 如果已经在捕获状态，只更新分辨率相关的 UI，跳过其他配置
         if wasCapturing {
@@ -556,26 +560,18 @@ final class DevicePanelView: NSView {
 
         // 更新 bezel：
         // - resolution 有效时（收到第一帧后）：使用实际分辨率的 aspectRatio
-        // - resolution 无效时（未收到帧）：使用设备默认的 aspectRatio
+        // - resolution 无效时（未收到帧）：保留当前 bezel 配置，避免位置跳动
         let resolutionValid = resolution.width > 0 && resolution.height > 0
         let resolutionChanged = abs(resolution.width - currentCaptureResolution.width) > 1 ||
             abs(resolution.height - currentCaptureResolution.height) > 1
 
-        // 只有在分辨率变化时才更新 bezel（避免重复配置）
-        if !wasCapturing || resolutionChanged {
-            if resolutionValid {
-                // 收到第一帧后，使用实际视频分辨率更新 bezel
-                bezelView.updateAspectRatio(resolution.width / resolution.height)
-            } else if !wasCapturing {
-                // 首次进入捕获状态但还没收到帧，使用设备默认值配置 bezel
-                if let device = androidDevice {
-                    configureBezel(for: device, aspectRatio: nil)
-                } else {
-                    configureBezel(for: platform, deviceName: deviceName, aspectRatio: nil)
-                }
-            }
+        // 只有在收到有效分辨率且分辨率变化时才更新 bezel
+        if resolutionValid && (!wasCapturing || resolutionChanged) {
+            // 收到第一帧后，使用实际视频分辨率更新 bezel
+            bezelView.updateAspectRatio(resolution.width / resolution.height)
             currentCaptureResolution = resolution
         }
+        // 注意：如果还没收到帧，保留当前 bezel 的 aspectRatio，不重新配置
 
         // 如果已经在捕获状态，只更新分辨率相关的 UI，跳过其他配置
         if wasCapturing {

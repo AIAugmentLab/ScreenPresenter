@@ -313,6 +313,38 @@ final class ScrcpySocketAcceptor {
 
     /// 接收到的数据包计数（用于调试）
     private var receivedPacketCount = 0
+    
+    // MARK: - 调试统计
+    
+    /// 总接收字节数
+    private var totalBytesReceived: Int = 0
+    
+    /// 统计周期内接收字节数
+    private var bytesInPeriod: Int = 0
+    
+    /// 统计周期内接收包数
+    private var packetsInPeriod: Int = 0
+    
+    /// 上次统计时间
+    private var lastStatsTime = CFAbsoluteTimeGetCurrent()
+    
+    /// 最小包大小
+    private var minPacketSize: Int = Int.max
+    
+    /// 最大包大小
+    private var maxPacketSize: Int = 0
+    
+    /// 接收间隔统计
+    private var lastReceiveTime = CFAbsoluteTimeGetCurrent()
+    
+    /// 最大接收间隔（ms）
+    private var maxReceiveInterval: Double = 0
+    
+    /// 接收间隔累计（用于计算平均值）
+    private var totalReceiveIntervals: Double = 0
+    
+    /// 接收间隔计数
+    private var receiveIntervalCount: Int = 0
 
     /// 递归接收数据
     private func receiveData(on connection: NWConnection) {
@@ -327,6 +359,41 @@ final class ScrcpySocketAcceptor {
                 }
 
                 if let data = content, !data.isEmpty {
+                    // 调试统计
+                    let now = CFAbsoluteTimeGetCurrent()
+                    let interval = (now - lastReceiveTime) * 1000 // 转换为毫秒
+                    lastReceiveTime = now
+                    
+                    receivedPacketCount += 1
+                    totalBytesReceived += data.count
+                    bytesInPeriod += data.count
+                    packetsInPeriod += 1
+                    
+                    // 更新包大小统计
+                    minPacketSize = min(minPacketSize, data.count)
+                    maxPacketSize = max(maxPacketSize, data.count)
+                    
+                    // 更新接收间隔统计
+                    if receivedPacketCount > 1 {
+                        maxReceiveInterval = max(maxReceiveInterval, interval)
+                        totalReceiveIntervals += interval
+                        receiveIntervalCount += 1
+                    }
+                    
+                    // 每 5 秒重置统计（保留内部统计逻辑，移除日志输出）
+                    let elapsed = now - lastStatsTime
+                    if elapsed >= 5.0 {
+                        // 重置周期统计
+                        bytesInPeriod = 0
+                        packetsInPeriod = 0
+                        lastStatsTime = now
+                        minPacketSize = Int.max
+                        maxPacketSize = 0
+                        maxReceiveInterval = 0
+                        totalReceiveIntervals = 0
+                        receiveIntervalCount = 0
+                    }
+                    
                     onDataReceived?(data)
                 }
 

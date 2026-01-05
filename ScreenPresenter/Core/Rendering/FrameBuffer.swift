@@ -51,6 +51,38 @@ final class FrameBuffer {
 
     /// 上次统计重置时间
     private var lastStatsResetTime = CFAbsoluteTimeGetCurrent()
+    
+    // MARK: - 调试统计
+    
+    /// 推送间隔统计
+    private var lastPushTime = CFAbsoluteTimeGetCurrent()
+    
+    /// 最大推送间隔
+    private var maxPushInterval: Double = 0
+    
+    /// 推送间隔累计
+    private var totalPushIntervals: Double = 0
+    
+    /// 推送计数（周期内）
+    private var pushCountInPeriod: Int = 0
+    
+    /// 消费间隔统计
+    private var lastConsumeTime = CFAbsoluteTimeGetCurrent()
+    
+    /// 最大消费间隔
+    private var maxConsumeInterval: Double = 0
+    
+    /// 消费间隔累计
+    private var totalConsumeIntervals: Double = 0
+    
+    /// 消费计数（周期内）
+    private var consumeCountInPeriod: Int = 0
+    
+    /// 连续跳过计数（用于检测持续掉帧）
+    private var consecutiveSkips: Int = 0
+    
+    /// 最大连续跳过数
+    private var maxConsecutiveSkips: Int = 0
 
     // MARK: - 初始化
 
@@ -67,11 +99,26 @@ final class FrameBuffer {
         lock.lock()
         defer { lock.unlock() }
 
+        // 计算推送间隔
+        let now = CFAbsoluteTimeGetCurrent()
+        let pushInterval = (now - lastPushTime) * 1000
+        lastPushTime = now
+        
+        if pushCountInPeriod > 0 {
+            maxPushInterval = max(maxPushInterval, pushInterval)
+            totalPushIntervals += pushInterval
+        }
+        pushCountInPeriod += 1
+
         // 检查上一帧是否被跳过
         let previousSkipped = !pendingFrameConsumed
 
         if previousSkipped {
             skippedFrameCount += 1
+            consecutiveSkips += 1
+            maxConsecutiveSkips = max(maxConsecutiveSkips, consecutiveSkips)
+        } else {
+            consecutiveSkips = 0
         }
 
         // 用新帧替换旧帧
@@ -92,6 +139,17 @@ final class FrameBuffer {
         guard !pendingFrameConsumed else {
             return nil
         }
+        
+        // 计算消费间隔
+        let now = CFAbsoluteTimeGetCurrent()
+        let consumeInterval = (now - lastConsumeTime) * 1000
+        lastConsumeTime = now
+        
+        if consumeCountInPeriod > 0 {
+            maxConsumeInterval = max(maxConsumeInterval, consumeInterval)
+            totalConsumeIntervals += consumeInterval
+        }
+        consumeCountInPeriod += 1
 
         pendingFrameConsumed = true
         consumedFrameCount += 1
@@ -165,18 +223,37 @@ final class FrameBuffer {
 extension FrameBuffer {
     /// 输出诊断日志
     func logDiagnostics(prefix: String = "[FrameBuffer]") {
-        let stats = getAndResetStats()
+        lock.lock()
+        let stats = (
+            skipped: skippedFrameCount,
+            pushed: pushedFrameCount,
+            consumed: consumedFrameCount,
+            interval: CFAbsoluteTimeGetCurrent() - lastStatsResetTime,
+            avgPushInterval: pushCountInPeriod > 1 ? totalPushIntervals / Double(pushCountInPeriod - 1) : 0,
+            maxPushInterval: maxPushInterval,
+            avgConsumeInterval: consumeCountInPeriod > 1 ? totalConsumeIntervals / Double(consumeCountInPeriod - 1) : 0,
+            maxConsumeInterval: maxConsumeInterval,
+            maxConsecutiveSkips: maxConsecutiveSkips
+        )
+        
+        // 重置统计
+        let now = CFAbsoluteTimeGetCurrent()
+        skippedFrameCount = 0
+        pushedFrameCount = 0
+        consumedFrameCount = 0
+        lastStatsResetTime = now
+        maxPushInterval = 0
+        totalPushIntervals = 0
+        pushCountInPeriod = 0
+        maxConsumeInterval = 0
+        totalConsumeIntervals = 0
+        consumeCountInPeriod = 0
+        maxConsecutiveSkips = 0
+        lock.unlock()
 
         guard stats.interval > 0 else { return }
 
-        let pushFPS = Double(stats.pushed) / stats.interval
-        let consumeFPS = Double(stats.consumed) / stats.interval
-        let skipFPS = Double(stats.skipped) / stats.interval
-
-        AppLogger.capture.info(
-            "\(prefix) 推送: \(String(format: "%.1f", pushFPS)) fps, " +
-                "消费: \(String(format: "%.1f", consumeFPS)) fps, " +
-                "跳过: \(String(format: "%.1f", skipFPS)) fps"
-        )
+        // 统计数据已计算，可用于调试或监控
+        // 生产环境已移除日志输出
     }
 }

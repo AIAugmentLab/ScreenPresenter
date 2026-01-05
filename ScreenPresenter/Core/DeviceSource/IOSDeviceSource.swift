@@ -110,7 +110,7 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
         videoDelegate = nil
         onFrame = nil
 
-        hasReceivedFirstFrame = false
+        lastCaptureSize = .zero
 
         updateState(.disconnected)
     }
@@ -128,7 +128,7 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
 
         // ⚠️ 重要：在启动会话之前设置标志，避免竞态条件
         capturingLock.withLock { $0 = true }
-        hasReceivedFirstFrame = false
+        lastCaptureSize = .zero  // 重置尺寸以便重新检测
 
         // 在后台线程启动会话
         await withCheckedContinuation { continuation in
@@ -253,8 +253,8 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
 
     // MARK: - 帧处理
 
-    /// 是否已获取视频尺寸
-    private var hasReceivedFirstFrame = false
+    /// 上一次的捕获尺寸（用于检测旋转）
+    private var lastCaptureSize: CGSize = .zero
 
     private func handleVideoSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
         // 检查捕获状态（使用线程安全的原子读取）
@@ -266,13 +266,22 @@ final class IOSDeviceSource: BaseDeviceSource, @unchecked Sendable {
             return
         }
 
-        // 从第一帧获取视频尺寸
-        if !hasReceivedFirstFrame {
-            hasReceivedFirstFrame = true
-            let width = CVPixelBufferGetWidth(pixelBuffer)
-            let height = CVPixelBufferGetHeight(pixelBuffer)
-            let size = CGSize(width: CGFloat(width), height: CGFloat(height))
-            updateCaptureSize(size)
+        // 获取当前帧尺寸
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        let currentSize = CGSize(width: CGFloat(width), height: CGFloat(height))
+
+        // 检测尺寸变化（包括旋转）
+        if currentSize != lastCaptureSize {
+            let wasLandscape = lastCaptureSize.width > lastCaptureSize.height
+            let isLandscape = currentSize.width > currentSize.height
+
+            if lastCaptureSize != .zero, wasLandscape != isLandscape {
+                AppLogger.capture.info("[iOS 旋转] 检测到方向变化: \(wasLandscape ? "横屏" : "竖屏") → \(isLandscape ? "横屏" : "竖屏")")
+            }
+
+            lastCaptureSize = currentSize
+            updateCaptureSize(currentSize)
             AppLogger.capture.info("iOS 捕获分辨率: \(width)x\(height)")
         }
 

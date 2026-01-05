@@ -68,7 +68,7 @@ final class DeviceBezelView: NSView {
     func configure(device: IOSDevice, aspectRatio: CGFloat? = nil) {
         deviceModel = device.deviceModel
         screenAspectRatio = aspectRatio ?? deviceModel.defaultScreenAspectRatio
-        updateLayers()
+        updateLayersAndSubviews()
     }
 
     /// 配置 Android 设备外观（推荐方式）
@@ -79,7 +79,7 @@ final class DeviceBezelView: NSView {
     func configure(device: AndroidDevice, aspectRatio: CGFloat? = nil) {
         deviceModel = device.deviceModel
         screenAspectRatio = aspectRatio ?? deviceModel.defaultScreenAspectRatio
-        updateLayers()
+        updateLayersAndSubviews()
     }
 
     /// 配置设备外观（fallback 方式）
@@ -90,7 +90,7 @@ final class DeviceBezelView: NSView {
     func configure(deviceName: String?, platform: DevicePlatform, aspectRatio: CGFloat? = nil) {
         deviceModel = DeviceModel.identify(from: deviceName, platform: platform)
         screenAspectRatio = aspectRatio ?? deviceModel.defaultScreenAspectRatio
-        updateLayers()
+        updateLayersAndSubviews()
     }
 
     /// 配置设备外观
@@ -100,14 +100,19 @@ final class DeviceBezelView: NSView {
     func configure(model: DeviceModel, aspectRatio: CGFloat? = nil) {
         deviceModel = model
         screenAspectRatio = aspectRatio ?? model.defaultScreenAspectRatio
-        updateLayers()
+        updateLayersAndSubviews()
     }
 
     /// 更新屏幕内容区域的宽高比
     func updateAspectRatio(_ ratio: CGFloat) {
         guard ratio > 0, ratio != screenAspectRatio else { return }
         screenAspectRatio = ratio
-        updateLayers()
+        updateLayersAndSubviews()
+    }
+
+    /// 是否为横屏模式（宽高比 > 1）
+    private var isLandscape: Bool {
+        screenAspectRatio > 1.0
     }
 
     // MARK: - UI 设置
@@ -187,13 +192,34 @@ final class DeviceBezelView: NSView {
         } else {
             false
         }
-        let extraBezelRatio: CGFloat = hasHomeButton ? 0.10 : 0
+        // Home 键机型的额外边框只在竖屏时生效
+        let extraBezelRatio: CGFloat = (hasHomeButton && !isLandscape) ? 0.10 : 0
 
-        // 计算设备整体的宽高比（根据屏幕宽高比和边框推算）
+        // 计算设备整体的宽高比
+        // 边框宽度始终基于物理短边（竖屏时为设备宽度，横屏时为设备高度）
+        let deviceAspect: CGFloat
         let r = screenAspectRatio
         let b = totalBezelRatio
         let e = extraBezelRatio
-        let deviceAspect = r / ((1 - 2 * b) + 2 * r * (b + e))
+        
+        if isLandscape {
+            // 横屏：边框宽度基于设备高度（物理短边）
+            // 屏幕宽度 = screenHeight * screenAspectRatio
+            // 设备高度 = screenHeight + 2 * (b * deviceHeight)
+            // 解方程: deviceHeight = screenHeight / (1 - 2*b)
+            // 设备宽度 = screenWidth + 2 * (b * deviceHeight)
+            //         = screenHeight * r + 2 * b * screenHeight / (1 - 2*b)
+            //         = screenHeight * (r + 2*b / (1 - 2*b))
+            //         = screenHeight * (r * (1-2*b) + 2*b) / (1-2*b)
+            // deviceAspect = deviceWidth / deviceHeight
+            //              = (r * (1-2*b) + 2*b) / (1-2*b) / (1 / (1-2*b))
+            //              = r * (1-2*b) + 2*b
+            deviceAspect = r * (1 - 2 * b) + 2 * b
+        } else {
+            // 竖屏：边框宽度基于设备宽度（物理短边）
+            // 原始公式
+            deviceAspect = r / ((1 - 2 * b) + 2 * r * (b + e))
+        }
 
         let deviceWidth: CGFloat
         let deviceHeight: CGFloat
@@ -219,26 +245,29 @@ final class DeviceBezelView: NSView {
         // 更新设备整体宽高比（供外部布局使用）
         aspectRatio = deviceAspect
 
+        // 设备的物理短边（无论横竖屏，物理短边始终是较小的那个）
+        let physicalShortSide = min(deviceWidth, deviceHeight)
+
         // 两层边框的宽度（各自独立计算）
-        let metalFrameWidth = deviceWidth * metalFrameRatio
-        let screenBezelWidth = deviceWidth * screenBezelRatio
-        let totalBezelWidth = metalFrameWidth + screenBezelWidth
+        // 边框宽度基于设备物理短边，确保横竖屏时边框宽度一致
+        let metalFrameWidth = physicalShortSide * metalFrameRatio
+        let screenBezelWidth = physicalShortSide * screenBezelRatio
 
-        // 计算屏幕宽度（用于屏幕圆角计算）
-        let screenWidth = deviceWidth - 2 * totalBezelWidth
-
-        // 圆角计算（从内向外，每层圆角递增）：
-        // 1. 屏幕圆角（最内层）- 相对于屏幕宽度
-        let screenCornerRadius = screenWidth * deviceModel.screenCornerRadiusRatio
-
-        // 2. 屏幕黑边框外圆角 = 屏幕圆角 + 黑边框宽度（物理正确的同心圆角关系）
-        let screenBezelOuterCornerRadius = screenCornerRadius + screenBezelWidth
-
-        // 3. 金属边框内圆角 = 屏幕黑边框外圆角（两层紧密贴合）
-        let metalInnerCornerRadius = screenBezelOuterCornerRadius
-
-        // 4. 金属边框外圆角 = 金属内圆角 + 金属边框宽度
-        let metalOuterCornerRadius = metalInnerCornerRadius + metalFrameWidth
+        // 圆角计算（从外向内，确保协调的同心圆角关系）：
+        // 方案：基于设备物理短边计算外圆角，然后向内推导
+        // 这样可以确保边框在角落处的视觉宽度与边缘一致
+        
+        // 1. 金属边框外圆角 - 基于设备物理短边
+        let metalOuterCornerRadius = physicalShortSide * deviceModel.screenCornerRadiusRatio
+        
+        // 2. 金属边框内圆角 = 外圆角 - 金属边框宽度（同心圆关系）
+        let metalInnerCornerRadius = max(0, metalOuterCornerRadius - metalFrameWidth)
+        
+        // 3. 屏幕黑边框外圆角 = 金属边框内圆角（两层紧密贴合）
+        let screenBezelOuterCornerRadius = metalInnerCornerRadius
+        
+        // 4. 屏幕圆角（最内层）= 屏幕黑边框外圆角 - 黑边框宽度
+        let screenCornerRadius = max(0, screenBezelOuterCornerRadius - screenBezelWidth)
 
         // 计算各层区域
         // 金属边框内边界（也是屏幕黑色边框外边界）
@@ -249,7 +278,7 @@ final class DeviceBezelView: NSView {
 
         // iPhone SE / Legacy 需要更大的顶部和底部边框
         if case .homeButton = deviceModel.topFeature {
-            let extraBezel = deviceWidth * extraBezelRatio
+            let extraBezel = physicalShortSide * extraBezelRatio
             metalInnerRect = CGRect(
                 x: metalInnerRect.minX,
                 y: metalInnerRect.minY + extraBezel * 0.4,
@@ -289,7 +318,7 @@ final class DeviceBezelView: NSView {
         // 2. 屏幕黑色边框（中间层）- 相对于 metalFrameLayer 的坐标
         let screenBezelFrame = CGRect(
             x: metalFrameWidth,
-            y: metalFrameWidth + (hasHomeButton ? deviceWidth * extraBezelRatio * 0.4 : 0),
+            y: metalFrameWidth + (hasHomeButton ? physicalShortSide * extraBezelRatio * 0.4 : 0),
             width: metalInnerRect.width,
             height: metalInnerRect.height
         )
@@ -304,8 +333,20 @@ final class DeviceBezelView: NSView {
         // 4. 顶部特征覆盖视图 - 覆盖整个视图区域（与 self 相同坐标系）
         featureOverlayView.frame = bounds
 
-        updateTopFeature(screenRect: screenRect, deviceWidth: deviceWidth)
-        updateSideButtons(deviceRect: deviceRect, deviceWidth: deviceWidth, deviceHeight: deviceHeight)
+        updateTopFeature(screenRect: screenRect, deviceWidth: physicalShortSide)
+        updateSideButtons(deviceRect: deviceRect, deviceWidth: physicalShortSide, deviceHeight: deviceHeight)
+    }
+
+    /// 更新布局并同步子视图的 frame
+    /// 这确保 screenContentView 的子视图（如 renderView）能跟随 screenContentView 的 bounds 变化
+    private func updateLayersAndSubviews() {
+        updateLayers()
+        
+        // 同步 screenContentView 所有子视图的 frame
+        // 子视图应该填满整个 screenContentView
+        screenContentView.subviews.forEach { subview in
+            subview.frame = screenContentView.bounds
+        }
     }
 
     /// 添加顶部特征 layer（添加到 featureOverlayView 确保在 screenContentView 之上）
@@ -324,6 +365,12 @@ final class DeviceBezelView: NSView {
         // 重置顶部特征的底部位置
         topFeatureBottomInset = 0
 
+        // 横屏模式下不显示顶部特征（刘海/灵动岛/摄像头开孔）
+        // 这些特征在物理设备横屏时会移到侧边，但由于复杂性暂不实现
+        if isLandscape {
+            return
+        }
+
         switch deviceModel.topFeature {
         case .none:
             break
@@ -332,7 +379,9 @@ final class DeviceBezelView: NSView {
             let islandWidth = screenRect.width * widthRatio
             let islandHeight = screenRect.width * heightRatio
             let islandCornerRadius = islandHeight / 2
-            let islandTopMargin = screenRect.width * 0.028
+            // 灵动岛距离屏幕顶部的间距（预留展开空间）
+            // iPhone 14/15/16/17 Pro: 约 14pt / 393pt ≈ 0.035，但需要预留展开空间
+            let islandTopMargin = screenRect.width * 0.035
 
             let islandRect = CGRect(
                 x: screenRect.midX - islandWidth / 2,
@@ -500,6 +549,12 @@ final class DeviceBezelView: NSView {
     private func updateSideButtons(deviceRect: CGRect, deviceWidth _: CGFloat, deviceHeight: CGFloat) {
         sideButtonLayers.forEach { $0.removeFromSuperlayer() }
         sideButtonLayers.removeAll()
+
+        // 横屏模式下不显示侧边按钮
+        // 因为侧边按钮在横屏时的位置会发生变化
+        if isLandscape {
+            return
+        }
 
         let buttons = deviceModel.sideButtons
 

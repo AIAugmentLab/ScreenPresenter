@@ -109,6 +109,29 @@ final class VideoToolboxDecoder {
 
     /// 统计周期内的丢弃帧数
     private var droppedInPeriod = 0
+    
+    // MARK: - 调试统计
+    
+    /// 解码耗时累计
+    private var totalDecodeTime: Double = 0
+    
+    /// 最大解码耗时
+    private var maxDecodeTime: Double = 0
+    
+    /// 解码调用次数（周期内）
+    private var decodeCallsInPeriod: Int = 0
+    
+    /// 解码成功回调时间统计
+    private var callbackTimes: [Double] = []
+    
+    /// 上次解码完成时间
+    private var lastDecodeCompleteTime = CFAbsoluteTimeGetCurrent()
+    
+    /// 最大解码完成间隔
+    private var maxDecodeInterval: Double = 0
+    
+    /// 队列积压警告阈值
+    private let queueWarningThreshold = 4
 
     // MARK: - 初始化
 
@@ -182,10 +205,6 @@ final class VideoToolboxDecoder {
         if currentPending > maxPendingFrames, !nalUnit.isKeyFrame {
             droppedFrameCount += 1
             droppedInPeriod += 1
-            // 每 60 个丢帧记录一次日志（约 1 秒 @ 60fps）
-            if droppedFrameCount % 60 == 1 {
-                AppLogger.capture.warning("[VTDecoder] 丢弃非关键帧，待解码: \(currentPending)/\(maxPendingFrames), 累计丢弃: \(droppedFrameCount)")
-            }
             return
         }
 
@@ -193,26 +212,42 @@ final class VideoToolboxDecoder {
         pendingFrameCount += 1
         pendingLock.unlock()
 
-        decodedInPeriod += 1
+        decodeCallsInPeriod += 1
 
-        // 定期输出诊断统计（每 5 秒）
+        // 定期重置统计（保留内部统计逻辑，移除日志输出）
         let now = CFAbsoluteTimeGetCurrent()
         if now - lastStatsLogTime >= 5.0 {
-            let decodeFPS = Double(decodedInPeriod) / (now - lastStatsLogTime)
-            let dropFPS = Double(droppedInPeriod) / (now - lastStatsLogTime)
-            AppLogger.capture.info("[VTDecoder] 诊断: 解码 \(String(format: "%.1f", decodeFPS)) fps, 丢弃 \(String(format: "%.1f", dropFPS)) fps, 待解码: \(currentPending)")
+            // 重置周期统计
             lastStatsLogTime = now
             decodedInPeriod = 0
             droppedInPeriod = 0
+            decodeCallsInPeriod = 0
+            totalDecodeTime = 0
+            maxDecodeTime = 0
+            maxDecodeInterval = 0
         }
 
         decodeQueue.async { [weak self] in
+            guard let self else { return }
+            
+            let decodeStartTime = CFAbsoluteTimeGetCurrent()
+            
             defer {
-                self?.pendingLock.lock()
-                self?.pendingFrameCount -= 1
-                self?.pendingLock.unlock()
+                pendingLock.lock()
+                pendingFrameCount -= 1
+                pendingLock.unlock()
+                
+                // 统计解码耗时
+                let decodeTime = (CFAbsoluteTimeGetCurrent() - decodeStartTime) * 1000
+                totalDecodeTime += decodeTime
+                maxDecodeTime = max(maxDecodeTime, decodeTime)
+                
+                // 统计解码间隔
+                let interval = (CFAbsoluteTimeGetCurrent() - lastDecodeCompleteTime) * 1000
+                maxDecodeInterval = max(maxDecodeInterval, interval)
+                lastDecodeCompleteTime = CFAbsoluteTimeGetCurrent()
             }
-            self?.decodeNALUnitSync(nalUnit: nalUnit, presentationTime: presentationTime)
+            decodeNALUnitSync(nalUnit: nalUnit, presentationTime: presentationTime)
         }
     }
 
@@ -223,7 +258,11 @@ final class VideoToolboxDecoder {
     ///   - presentationTime: 显示时间（可选）
     func decode(avccData: Data, isKeyFrame: Bool, presentationTime: CMTime? = nil) {
         decodeQueue.async { [weak self] in
-            self?.decodeAVCCDataSync(avccData: avccData, isKeyFrame: isKeyFrame, presentationTime: presentationTime)
+            // 使用 autoreleasepool 确保每帧解码过程中创建的临时对象及时释放
+            // 避免在高频解码循环中 autorelease 对象堆积导致内存缓慢增长
+            autoreleasepool {
+                self?.decodeAVCCDataSync(avccData: avccData, isKeyFrame: isKeyFrame, presentationTime: presentationTime)
+            }
         }
     }
 
@@ -288,12 +327,10 @@ final class VideoToolboxDecoder {
 
                 if status == noErr, let imageBuffer {
                     decoder.decodedFrameCount += 1
+                    decoder.decodedInPeriod += 1
                     decoder.onDecodedFrame?(imageBuffer)
                 } else {
                     decoder.failedFrameCount += 1
-                    if status != noErr {
-                        AppLogger.capture.warning("[VTDecoder] 解码失败 #\(decoder.failedFrameCount)，状态: \(status)")
-                    }
                 }
             },
             decompressionOutputRefCon: Unmanaged.passUnretained(self).toOpaque()

@@ -35,13 +35,13 @@ final class DeviceCaptureInfoView: NSView {
     // MARK: - 字体配置
 
     /// 设备名称标签的基准字体大小
-    private let deviceNameBaseFontSize: CGFloat = 22
+    private let deviceNameBaseFontSize: CGFloat = 24
     /// 设备名称标签的最小字体大小
     private let deviceNameMinFontSize: CGFloat = 16
     /// 设备名称标签的基准字体大小
-    private let deviceInfoBaseFontSize: CGFloat = 16
+    private let deviceInfoBaseFontSize: CGFloat = 14
     /// 设备名称标签的最小字体大小
-    private let deviceInfoMinFontSize: CGFloat = 12
+    private let deviceInfoMinFontSize: CGFloat = 10
 
     // MARK: - 回调
 

@@ -190,8 +190,9 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
     /// 监控任务
     private var monitorTask: Task<Void, Never>?
 
-    /// 帧缓冲器（双帧缓冲设计，与 scrcpy frame_buffer.c 一致）
-    private let frameBuffer = FrameBuffer()
+    /// 帧管道（参照 scrcpy trait 模式设计）
+    /// 实现: 解码线程 → FramePipeline → 主线程渲染
+    private let framePipeline = FramePipeline()
 
     /// 最新的 CVPixelBuffer 存储（兼容旧接口）
     private var _latestPixelBuffer: CVPixelBuffer?
@@ -199,14 +200,28 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
     /// 最新的 CVPixelBuffer（供渲染使用）
     override var latestPixelBuffer: CVPixelBuffer? { _latestPixelBuffer }
 
-    /// 帧回调
-    var onFrame: ((CVPixelBuffer) -> Void)?
+    /// 帧回调（通过 FramePipeline 分发，已实现事件合并）
+    var onFrame: ((CVPixelBuffer) -> Void)? {
+        didSet {
+            // 将回调注册到帧管道
+            if let callback = onFrame {
+                framePipeline.setFrameHandler { [weak self] pixelBuffer in
+                    // 更新最新帧引用
+                    self?._latestPixelBuffer = pixelBuffer
+                    // 调用外部回调
+                    callback(pixelBuffer)
+                }
+            } else {
+                framePipeline.setFrameHandler { _ in }
+            }
+        }
+    }
 
     /// 当前端口
     private var currentPort: Int
 
-    /// 帧缓冲统计任务
-    private var frameBufferStatsTask: Task<Void, Never>?
+    /// 帧管道统计任务
+    private var pipelineStatsTask: Task<Void, Never>?
 
     // MARK: - 初始化
 
@@ -367,7 +382,12 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
 
             // 设置数据接收回调
             socketAcceptor?.onDataReceived = { [weak self] data in
-                self?.handleReceivedData(data)
+                // 使用 autoreleasepool 确保每次数据处理过程中创建的临时对象及时释放
+                // NWConnection 回调在后台线程，如果没有 autoreleasepool，
+                // autorelease 对象会堆积直到某个时机才释放
+                autoreleasepool {
+                    self?.handleReceivedData(data)
+                }
             }
 
             // 3. 启动监听/连接
@@ -388,8 +408,11 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
             // 启动进程监控
             startProcessMonitoring()
 
-            // 启动帧缓冲统计任务（每 5 秒输出一次）
-            startFrameBufferStats()
+            // 启动帧管道（使用初始尺寸，会在收到第一帧时更新）
+            framePipeline.start(size: CGSize(width: 1080, height: 1920))
+
+            // 启动帧管道统计任务（每 5 秒输出一次）
+            startPipelineStats()
 
         } catch {
             let captureError = DeviceSourceError.captureStartFailed(error.localizedDescription)
@@ -401,8 +424,11 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
     override func stopCapture() async {
         AppLogger.capture.info("停止捕获: \(displayName)")
 
-        // 0. 停止帧缓冲统计任务
-        stopFrameBufferStats()
+        // 0. 停止帧管道统计任务
+        stopPipelineStats()
+        
+        // 0.5. 停止帧管道
+        framePipeline.stop()
 
         // 1. 停止 Socket 接收器
         socketAcceptor?.stop()
@@ -424,8 +450,8 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
         // 5. 重置解码器
         decoder?.reset()
 
-        // 6. 重置帧缓冲器
-        frameBuffer.reset()
+        // 6. 重置帧管道（清空旧帧）
+        framePipeline.stop()
 
         if state == .capturing {
             updateState(.connected)
@@ -438,9 +464,20 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
 
     /// 过滤掉的非 VCL NAL 计数（用于诊断）
     private var filteredNonVCLCount = 0
+    
+    /// 端到端延迟统计
+    private var frameReceiveTime: CFAbsoluteTime = 0
+    private var frameDecodeCompleteTime: CFAbsoluteTime = 0
+    private var totalE2ELatency: Double = 0
+    private var maxE2ELatency: Double = 0
+    private var e2eLatencyCount: Int = 0
+    private var lastE2EStatsTime = CFAbsoluteTimeGetCurrent()
 
     /// 处理接收到的数据
     private func handleReceivedData(_ data: Data) {
+        // 记录数据接收时间
+        frameReceiveTime = CFAbsoluteTimeGetCurrent()
+        
         guard let parser = streamParser, let decoder else { return }
 
         // 解析 NAL 单元
@@ -498,7 +535,7 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
                 guard let vps = parser.vps, let sps = parser.sps, let pps = parser.pps else { return }
                 try decoder.initializeH265(vps: vps, sps: sps, pps: pps)
             }
-            AppLogger.capture.info("解码器初始化成功")
+            AppLogger.capture.info("✅ 解码器初始化成功（可能是旋转后重建）")
         } catch {
             AppLogger.capture.error("解码器初始化失败: \(error.localizedDescription)")
         }
@@ -513,6 +550,13 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
         // 重置解码器（这会导致 isReady = false）
         decoder?.reset()
 
+        // 重置帧管道（清空旧帧，避免显示旧的旋转前内容）
+        framePipeline.stop()
+        // 立即重新启动（使用当前尺寸或默认尺寸）
+        framePipeline.start(size: captureSize != .zero ? captureSize : CGSize(width: 1080, height: 1920))
+
+        AppLogger.capture.info("[旋转] 解码器已重置，等待新的完整参数集...")
+
         // 不在这里调用 initializeDecoder()
         // 等待 handleReceivedData 中收到新的参数集后自动重新初始化
         // 因为设备旋转时，scrcpy 会重新发送完整的 config packet (SPS + PPS)
@@ -522,37 +566,60 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
     /// 使用双帧缓冲设计（与 scrcpy frame_buffer.c 一致）
     private func handleDecodedFrame(_ pixelBuffer: CVPixelBuffer) {
         guard state == .capturing else { return }
-
-        // 推送到帧缓冲器（双帧缓冲，最新帧优先）
-        // 返回值表示上一帧是否被跳过（未被消费就被新帧覆盖）
-        let previousSkipped = frameBuffer.push(pixelBuffer)
-
-        // 如果有帧被跳过，这在实时投屏中是正常现象
-        // 只在调试模式下记录详细日志
-        if previousSkipped {
-            AppLogger.capture.debug("[FrameBuffer] 帧被跳过（新帧覆盖未消费的旧帧）")
+        
+        // 计算端到端延迟（从数据接收到解码完成）
+        let decodeCompleteTime = CFAbsoluteTimeGetCurrent()
+        let e2eLatency = (decodeCompleteTime - frameReceiveTime) * 1000 // 转换为毫秒
+        
+        totalE2ELatency += e2eLatency
+        maxE2ELatency = max(maxE2ELatency, e2eLatency)
+        e2eLatencyCount += 1
+        
+        // 每 5 秒重置统计（保留内部统计逻辑，移除日志输出）
+        let now = CFAbsoluteTimeGetCurrent()
+        let elapsed = now - lastE2EStatsTime
+        if elapsed >= 5.0 {
+            // 重置统计
+            lastE2EStatsTime = now
+            totalE2ELatency = 0
+            maxE2ELatency = 0
+            e2eLatencyCount = 0
         }
 
         // 更新最新帧（兼容旧接口）
         _latestPixelBuffer = pixelBuffer
 
-        // 更新捕获尺寸
+        // 更新捕获尺寸（这会触发 UI 刷新，包括 bezel 更新）
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
-        updateCaptureSize(CGSize(width: width, height: height))
+        let newSize = CGSize(width: width, height: height)
+
+        // 检测尺寸变化（可能是旋转导致）
+        if captureSize != newSize {
+            let wasLandscape = captureSize.width > captureSize.height
+            let isLandscape = width > height
+            if wasLandscape != isLandscape {
+                AppLogger.capture.info("[旋转] 检测到方向变化: \(wasLandscape ? "横屏" : "竖屏") → \(isLandscape ? "横屏" : "竖屏")")
+                AppLogger.capture.info("[旋转] 新尺寸: \(width) x \(height)")
+            }
+        }
+
+        updateCaptureSize(newSize)
 
         // 创建 CapturedFrame
         let frame = CapturedFrame(
             pixelBuffer: pixelBuffer,
             presentationTime: CMTime(value: Int64(CACurrentMediaTime() * 1_000_000), timescale: 1_000_000),
-            size: CGSize(width: width, height: height)
+            size: newSize
         )
         emitFrame(frame)
 
-        // 回调通知（渲染线程会从帧缓冲器消费）
-        DispatchQueue.main.async { [weak self] in
-            self?.onFrame?(pixelBuffer)
-        }
+        // 使用 FramePipeline 分发帧到主线程
+        // FramePipeline 实现了 scrcpy 的事件合并机制：
+        // - 如果上一帧还未被渲染，不发送新的主线程事件
+        // - 主线程消费时总是获取最新帧
+        // 这避免了主线程任务堆积的问题
+        framePipeline.pushFrame(pixelBuffer)
     }
 
     // MARK: - 辅助方法
@@ -632,23 +699,15 @@ final class ScrcpyDeviceSource: BaseDeviceSource {
 
     // MARK: - 帧缓冲统计
 
-    /// 启动帧缓冲统计任务
-    private func startFrameBufferStats() {
-        frameBufferStatsTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 秒
-
-                guard !Task.isCancelled, let self else { break }
-
-                // 输出帧缓冲统计
-                frameBuffer.logDiagnostics(prefix: "[Android FrameBuffer]")
-            }
-        }
+    /// 启动帧管道统计任务（生产环境已禁用日志输出）
+    private func startPipelineStats() {
+        // 保留任务结构以便后续调试使用，但不再输出日志
+        pipelineStatsTask = nil
     }
 
-    /// 停止帧缓冲统计任务
-    private func stopFrameBufferStats() {
-        frameBufferStatsTask?.cancel()
-        frameBufferStatsTask = nil
+    /// 停止帧管道统计任务
+    private func stopPipelineStats() {
+        pipelineStatsTask?.cancel()
+        pipelineStatsTask = nil
     }
 }

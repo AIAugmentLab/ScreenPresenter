@@ -324,59 +324,59 @@ extension DeviceModel {
         // iPhone 通用 - 使用 Pro 系列参数
         case .iPhoneGeneric:
             0.140
-        // Samsung 系列
+        // Samsung 系列 - 调大圆角以与边框协调
         case .samsungGalaxyS, .samsungGalaxySUltra, .samsungGalaxyA, .samsungGalaxyNote:
-            0.08
+            0.11
         case .samsungGalaxyFold, .samsungGalaxyFlip:
-            0.05
+            0.08
         // Google Pixel 系列
         case .googlePixel, .googlePixelPro, .googlePixelA:
-            0.08
+            0.11
         case .googlePixelFold:
-            0.05
+            0.08
         // 小米系列
         case .xiaomiMi, .xiaomiUltra, .xiaomiMix, .redmi, .redmiNote, .redmiK, .poco:
-            0.08
+            0.11
         // 一加系列
         case .oneplus, .oneplusAce, .oneplusNord:
-            0.08
+            0.11
         // OPPO 系列
         case .oppoFind, .oppoFindX, .oppoReno, .oppoA:
-            0.08
+            0.11
         // Vivo 系列
         case .vivoX, .vivoS, .vivoY, .iqoo, .iqooNeo:
-            0.08
+            0.11
         case .vivoXFold:
-            0.05
+            0.08
         // 华为/荣耀系列
         case .huaweiP, .huaweiMate, .huaweiNova, .honor, .honorMagic, .honorX:
-            0.08
+            0.11
         case .huaweiMateX:
-            0.05
+            0.08
         // Realme 系列
         case .realmeGT, .realme:
-            0.08
+            0.11
         // Sony Xperia 系列 - 21:9 屏幕，圆角较小
         case .sonyXperia1, .sonyXperia5, .sonyXperia10:
-            0.06
+            0.08
         // Motorola 系列
         case .motorolaEdge, .motoG:
-            0.08
+            0.11
         case .motorolaRazr:
-            0.05
+            0.08
         // ASUS 系列
         case .asusROG, .asusZenfone:
-            0.07
+            0.10
         // 游戏手机系列 - 圆角较小
         case .nubiaRedMagic, .blackShark, .lenovoLegion:
-            0.06
+            0.08
         // 其他品牌
         case .meizu, .nothingPhone, .tcl, .zte, .transsion:
-            0.07
+            0.10
         case .androidGeneric:
-            0.07
+            0.10
         case .unknown:
-            0.08
+            0.10
         }
     }
 
@@ -1046,27 +1046,27 @@ extension DeviceModel {
     /// | iPhone 11/X | 209 | 375-414 | 0.50-0.56 | 30 |
     var topFeature: TopFeature {
         switch self {
-        // iPhone 17 Pro - 动态岛
+        // iPhone 17 Pro - 动态岛 (126pt×36pt / 393pt, 距顶部12.5pt)
         case .iPhone17Pro:
-            .dynamicIsland(widthRatio: 0.321, heightRatio: 0.092)
+            .dynamicIsland(widthRatio: 0.321, heightRatio: 0.091)
         // iPhone 17 - 动态岛
         case .iPhone17:
-            .dynamicIsland(widthRatio: 0.321, heightRatio: 0.092)
+            .dynamicIsland(widthRatio: 0.321, heightRatio: 0.091)
         // iPhone 16 Pro - 动态岛 126pt×36pt / 393pt
         case .iPhone16Pro:
-            .dynamicIsland(widthRatio: 0.321, heightRatio: 0.092)
+            .dynamicIsland(widthRatio: 0.321, heightRatio: 0.091)
         // iPhone 16 - 动态岛
         case .iPhone16:
-            .dynamicIsland(widthRatio: 0.321, heightRatio: 0.092)
+            .dynamicIsland(widthRatio: 0.321, heightRatio: 0.091)
         // iPhone 15 Pro - 动态岛
         case .iPhone15Pro:
-            .dynamicIsland(widthRatio: 0.321, heightRatio: 0.092)
+            .dynamicIsland(widthRatio: 0.321, heightRatio: 0.091)
         // iPhone 15 - 动态岛
         case .iPhone15:
-            .dynamicIsland(widthRatio: 0.321, heightRatio: 0.092)
+            .dynamicIsland(widthRatio: 0.321, heightRatio: 0.091)
         // iPhone 14 Pro - 首款动态岛
         case .iPhone14Pro:
-            .dynamicIsland(widthRatio: 0.321, heightRatio: 0.092)
+            .dynamicIsland(widthRatio: 0.321, heightRatio: 0.091)
         // iPhone 14 - 小刘海 162pt×34pt / 390pt
         case .iPhone14:
             .notch(widthRatio: 0.415, heightRatio: 0.087)
@@ -1087,7 +1087,7 @@ extension DeviceModel {
             .homeButton
         // iPhone 通用 - 使用动态岛
         case .iPhoneGeneric:
-            .dynamicIsland(widthRatio: 0.321, heightRatio: 0.092)
+            .dynamicIsland(widthRatio: 0.321, heightRatio: 0.091)
         // Samsung 系列 - 居中打孔
         case .samsungGalaxyS, .samsungGalaxySUltra, .samsungGalaxyA, .samsungGalaxyNote:
             .punchHole(position: .center, sizeRatio: 0.038)
