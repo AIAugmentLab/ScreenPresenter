@@ -69,7 +69,7 @@ final class DeviceCaptureInfoView: NSView {
 
     private var autoHideTimer: Timer?
     /// 自动隐藏延时（秒）
-    private let autoHideDelay: TimeInterval = 2.0
+    private let autoHideDelay: TimeInterval = 1.5
 
     // MARK: - 初始化
 

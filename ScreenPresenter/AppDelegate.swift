@@ -237,20 +237,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let deviceMenuItem = NSMenuItem()
         deviceMenuItem.submenu = deviceMenu
 
-        deviceMenu.addItem(
+        let refreshItem = deviceMenu.addItem(
             withTitle: L10n.menu.refreshDevices,
             action: #selector(refreshDevices(_:)),
             keyEquivalent: "r"
         )
+        refreshItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
 
         deviceMenu.addItem(NSMenuItem.separator())
 
         // 导出日志
-        deviceMenu.addItem(
+        let exportItem = deviceMenu.addItem(
             withTitle: L10n.menu.exportLogs,
             action: #selector(exportLogs(_:)),
             keyEquivalent: "E"
-        ).keyEquivalentModifierMask = [.command, .shift]
+        )
+        exportItem.keyEquivalentModifierMask = [.command, .shift]
+        exportItem.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
 
         deviceMenu.addItem(NSMenuItem.separator())
 
@@ -300,6 +303,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         colorCompItem.keyEquivalentModifierMask = [.command, .shift]
         colorCompItem.image = NSImage(systemSymbolName: "paintpalette", accessibilityDescription: nil)
+
+        viewMenu.addItem(NSMenuItem.separator())
 
         mainMenu.addItem(viewMenuItem)
 

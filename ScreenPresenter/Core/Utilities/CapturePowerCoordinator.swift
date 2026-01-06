@@ -58,13 +58,19 @@ final class CapturePowerCoordinator {
 
     /// 评估当前状态并更新 blocker
     func evaluateAndUpdate() {
-        let shouldBlock = preferences.preventAutoLockDuringCapture && isAnyDeviceCapturing
+        let settingEnabled = preferences.preventAutoLockDuringCapture
+        let iosCapturing = AppState.shared.iosCapturing
+        let androidCapturing = AppState.shared.androidCapturing
+        let shouldBlock = settingEnabled && isAnyDeviceCapturing
 
-        AppLogger.app.debug(
-            "CapturePowerCoordinator 评估: shouldBlock=\(shouldBlock), " +
-            "设置=\(preferences.preventAutoLockDuringCapture), " +
-            "iOS捕获=\(AppState.shared.iosCapturing), " +
-            "Android捕获=\(AppState.shared.androidCapturing)"
+        let statusIcon = shouldBlock ? "🔒" : "💤"
+        let settingStatus = settingEnabled ? "✅ 开启" : "❌ 关闭"
+        let iosStatus = iosCapturing ? "📱 捕获中" : "📱 未捕获"
+        let androidStatus = androidCapturing ? "🤖 捕获中" : "🤖 未捕获"
+
+        AppLogger.app.info(
+            "\(statusIcon) 休眠阻止: \(shouldBlock ? "生效" : "未生效") | " +
+            "防息屏设置: \(settingStatus) | iOS: \(iosStatus) | Android: \(androidStatus)"
         )
 
         if shouldBlock {

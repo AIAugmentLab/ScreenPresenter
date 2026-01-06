@@ -96,7 +96,7 @@ final class DevicePanelView: NSView {
     /// 隐藏延迟计时器（鼠标移出后延迟隐藏）
     private var hideDelayTimer: Timer?
     /// 隐藏延迟时间（秒）
-    private let hideDelayDuration: TimeInterval = 2.0
+    private let hideDelayDuration: TimeInterval = 1.5
 
     // MARK: - FPS 更新定时器
 
