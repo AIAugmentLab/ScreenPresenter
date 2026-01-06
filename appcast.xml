@@ -6,41 +6,7 @@
         <language>zh-Hans</language>
         <link>https://github.com/AIAugmentLab/ScreenPresenter</link>
         
-        <!-- 当前版本 -->
-        <item>
-            <title>Version 1.0.0</title>
-            <description>
-                <![CDATA[
-                <h2>🚀 ScreenPresenter 1.0.0</h2>
-                <h3>✨ 功能</h3>
-                <ul>
-                    <li>iOS 设备实时投屏</li>
-                    <li>Android 设备实时投屏（基于 scrcpy）</li>
-                    <li>多种布局模式（左右并排、仅左侧、仅右侧）</li>
-                    <li>设备边框显示/隐藏</li>
-                    <li>防休眠功能</li>
-                    <li>颜色补偿调节</li>
-                    <li>多语言支持（中/英）</li>
-                    <li>自动更新功能</li>
-                </ul>
-                ]]>
-            </description>
-            <pubDate>Mon, 06 Jan 2026 12:00:00 +0800</pubDate>
-            
-            <!-- 版本信息 -->
-            <sparkle:version>1</sparkle:version>
-            <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
-            
-            <!-- 最低系统要求 -->
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            
-            <!-- 下载链接 -->
-            <enclosure 
-                url="https://github.com/AIAugmentLab/ScreenPresenter/releases/download/1.0.0/ScreenPresenter.zip"
-                length="0"
-                type="application/octet-stream"
-                sparkle:edSignature="YOUR_ED25519_SIGNATURE_HERE"
-            />
-        </item>
+        <!-- 暂无更新，首次发布后在此添加版本信息 -->
+        
     </channel>
 </rss>

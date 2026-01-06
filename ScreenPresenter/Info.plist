@@ -31,7 +31,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>ScreenPresenter 需要访问摄像头以检测和捕获通过 USB 连接的 iOS 设备画面。</string>
 	<key>SUFeedURL</key>
-	<string>https://raw.githubusercontent.com/AIAugmentLab/ScreenPresenter/main/appcast.xml</string>
+	<string>https://gist.githubusercontent.com/sunimp/529546d3936dfdc120e88bdbe21bef55/raw/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>FpB9eF7errR/gcAwOJkKbzGIY33I34PS+W0+Lg9W4Gs=</string>
 	<key>SUEnableAutomaticChecks</key>

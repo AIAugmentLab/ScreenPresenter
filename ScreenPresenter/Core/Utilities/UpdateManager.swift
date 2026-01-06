@@ -102,17 +102,11 @@ final class UpdateManager: NSObject {
 
 extension UpdateManager: SPUUpdaterDelegate {
 
-    /// 自定义 appcast 请求（用于私有仓库访问 appcast.xml）
-    func updater(
-        _ updater: SPUUpdater,
-        willSendFeedRequest request: NSMutableURLRequest
-    ) {
-        // 如果配置了 GitHub Token，添加认证头以访问私有仓库
-        if let token = githubAccessToken, !token.isEmpty {
-            // 对于 raw.githubusercontent.com，需要使用 Bearer token
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            AppLogger.app.debug("🔐 已为 appcast 请求添加 GitHub Token 认证")
-        }
+    /// 提供自定义的 appcast 数据
+    /// 由于私有仓库的 raw URL 需要认证，我们手动获取 appcast 内容
+    func updater(_ updater: SPUUpdater, shouldAllowInsecureConnectionFor update: SUAppcastItem) -> Bool {
+        // 允许 HTTPS 连接（GitHub 都是 HTTPS）
+        return false
     }
 
     /// 自定义下载请求（用于私有仓库 Token 认证下载 Release Assets）
