@@ -48,17 +48,17 @@
                 </ul>
                 ]]>
             </description>
-            <pubDate>Tue, 06 Jan 2026 20:33:56 +0800</pubDate>
+            <pubDate>Wed, 21 Jan 2026 17:05:30 +0800</pubDate>
             
-            <sparkle:version>202601062033</sparkle:version>
-            <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
+            <sparkle:version>202601211704</sparkle:version>
+            <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             
             <enclosure 
-                url="https://api.github.com/repos/AIAugmentLab/ScreenPresenter/releases/assets/336964856"
-                length="10383894"
+                url="https://api.github.com/repos/AIAugmentLab/ScreenPresenter/releases/assets/343702512"
+                length="10409908"
                 type="application/octet-stream"
-                sparkle:edSignature="1pnniv14GfyfASeDk97JK3JcEdXJLAuXknU66IAwtrShZKNT3/j+Q+dJ3pv6ALLc1ScIEtpdyzUSSgcb50C5AQ=="
+                sparkle:edSignature="yz1dE62AZV94eRxrfBnILR1+K7m8thuEvlfHQcsSV7cMcBdtHcaJXe5yJFEtIQQWjEjY2yian95W9onW3fzQBQ=="
             />
         </item>
     </channel>
