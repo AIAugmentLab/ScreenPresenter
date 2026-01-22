@@ -299,4 +299,4 @@ if currentPending > maxPendingFrames, !nalUnit.isKeyFrame {
 
 ## 📄 许可证
 
-内部工具，仅供内部使用。
+本项目采用 MIT 许可证，详情见 `LICENSE`。
