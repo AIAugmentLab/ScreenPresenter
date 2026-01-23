@@ -148,7 +148,7 @@ ScreenPresenter/
 | 系统版本 | FBDeviceControl |
 | 信任状态 | FBDeviceControl |
 
-> ⚠️ **重要**: FBDeviceControl 失败不影响主捕获流程，仅降级为 AVFoundation 模式。
+> ℹ️ **重要**: FBDeviceControl 失败不影响主捕获流程，仅降级为 AVFoundation 模式。
 
 ## 🤖 Android 投屏
 
