@@ -9,7 +9,6 @@ macOS 设备投屏工具，支持同时展示 iOS 和 Android 设备屏幕，具
 - 🖥️ **Metal 渲染**: CVDisplayLink 驱动的 60fps 高性能渲染
 - 🔄 **双设备展示**: 支持同时展示两台设备（iOS + Android）
 - 📐 **仿真边框**: 根据真实设备型号绘制设备外观（动态岛/刘海/打孔屏/侧边按键）
-- 🎛️ **纯 AppKit**: 零 SwiftUI 依赖，最大化系统兼容性
 - 🌐 **多语言**: 中英文双语支持
 
 ## 📋 系统要求
@@ -24,7 +23,6 @@ macOS 设备投屏工具，支持同时展示 iOS 和 Android 设备屏幕，具
 
 | 层级 | 技术 |
 |------|------|
-| UI 框架 | AppKit (NSWindow / NSView) |
 | 渲染引擎 | Metal (CAMetalLayer + CVMetalTextureCache) |
 | 帧同步 | CVDisplayLink |
 | iOS 捕获 | CoreMediaIO + AVFoundation |
